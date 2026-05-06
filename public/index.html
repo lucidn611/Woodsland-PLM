@@ -52,8 +52,8 @@
     .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
     .badge-feedback   { background: #fef3c7; color: #92400e; }
     .badge-approved   { background: #d1fae5; color: #065f46; }
-    .badge-development{ background: #dbeafe; color: #1e40af; }
-    .badge-review     { background: #ede9fe; color: #5b21b6; }
+    .badge-development{ background: #d1fae5; color: #065f46; }
+    .badge-review     { background: #d1fae5; color: #065f46; }
     .badge-done       { background: #f0fdf4; color: #166534; }
     .badge-pending    { background: #fef9c3; color: #854d0e; }
     .badge-rejected   { background: #fee2e2; color: #991b1b; }
@@ -201,8 +201,8 @@
         <div class="content">
           <div class="stats-row">
             <div class="stat-card" style="cursor:pointer" @click="statusFilter=''"><div class="num">{{ projects.length }}</div><div class="lbl">Tổng dự án</div></div>
-            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='pending'?'':'pending'"><div class="num" style="color:#854d0e">{{ projects.filter(p=>p.status==='pending').length }}</div><div class="lbl">Chờ duyệt</div></div>
-            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='development'?'':'development'"><div class="num" style="color:#1e40af">{{ projects.filter(p=>p.status==='development').length }}</div><div class="lbl">Đang phát triển</div></div>
+            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='pending'?'':'pending'"><div class="num" style="color:#854d0e">{{ projects.filter(p=>p.status==='pending').length }}</div><div class="lbl">Chưa duyệt</div></div>
+            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='development'?'':'development'"><div class="num" style="color:#065f46">{{ projects.filter(p=>p.status==='development'||p.status==='review').length }}</div><div class="lbl">Đã duyệt</div></div>
             <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='done'?'':'done'"><div class="num" style="color:#166534">{{ projects.filter(p=>p.status==='done').length }}</div><div class="lbl">Hoàn thành</div></div>
             <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='rejected'?'':'rejected'"><div class="num" style="color:#991b1b">{{ projects.filter(p=>p.status==='rejected').length }}</div><div class="lbl">Từ chối</div></div>
           </div>
@@ -1150,10 +1150,8 @@ createApp({
     const myVotes = ref({})
 
     const stages = [
-      { key:'pending', icon:'📋', label:'Chờ duyệt' },
-      { key:'feedback', icon:'💬', label:'Thu thập ý kiến' },
-      { key:'development', icon:'⚙️', label:'Phát triển' },
-      { key:'review', icon:'🔍', label:'Review' },
+      { key:'pending', icon:'📋', label:'Chưa duyệt' },
+      { key:'development', icon:'✅', label:'Đã duyệt' },
       { key:'done', icon:'🎉', label:'Hoàn thành' },
     ]
 
@@ -1170,7 +1168,7 @@ createApp({
 
     const approvedFeedbacks = computed(() => feedbackList.value.filter(f => f.status === 'approved'))
 
-    const statusLabel = s => ({ pending:'Chờ duyệt', feedback:'Thu thập ý kiến', approved:'Đã phê duyệt', development:'Đang phát triển', review:'Đang review', done:'Hoàn thành', rejected:'Từ chối', draft:'Nháp' }[s] || s)
+    const statusLabel = s => ({ pending:'Chưa duyệt', feedback:'Thu thập ý kiến', approved:'Đã duyệt', development:'Đã duyệt', review:'Đã duyệt', done:'Hoàn thành', rejected:'Từ chối', draft:'Nháp' }[s] || s)
     const feedbackStatusLabel = s => ({ pending:'Chờ duyệt', approved:'Duyệt', rejected:'Từ chối', deferred:'Hoãn' }[s] || s)
     const formatDate = d => d ? d.substring(0,16).replace('T',' ') : ''
     const myVote = id => myVotes.value[id]
