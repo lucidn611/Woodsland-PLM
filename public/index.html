@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DX Lifecycle Manager</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f0f2f5; color: #1a1a1a; }
+
+    .app { display: flex; min-height: 100vh; }
+    .sidebar { width: 220px; background: #1e293b; color: #cbd5e1; flex-shrink: 0; display: flex; flex-direction: column; }
+    .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid #334155; }
+    .sidebar-logo h1 { font-size: 15px; font-weight: 700; color: #f1f5f9; }
+    .sidebar-logo p { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .sidebar-nav { padding: 12px 0; flex: 1; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; font-size: 13px; transition: background .15s; }
+    .nav-item:hover, .nav-item.active { background: #334155; color: #f1f5f9; }
+    .nav-item .icon { font-size: 16px; }
+    .sidebar-user { padding: 12px 16px; border-top: 1px solid #334155; font-size: 12px; color: #64748b; }
+    .sidebar-user span { color: #94a3b8; }
+
+    .main { flex: 1; overflow: auto; }
+    .topbar { background: #fff; padding: 14px 24px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
+    .topbar h2 { font-size: 16px; font-weight: 600; }
+    .content { padding: 20px 24px; }
+
+    /* Lifecycle stages */
+    .lifecycle-bar { display: flex; align-items: center; gap: 0; margin-bottom: 18px; overflow-x: auto; }
+    .stage { display: flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 11px; font-weight: 500; background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; position: relative; white-space: nowrap; }
+    .stage:not(:last-child)::after { content: '›'; position: absolute; right: -10px; font-size: 16px; color: #cbd5e1; z-index: 1; }
+    .stage:first-child { border-radius: 6px 0 0 6px; }
+    .stage:last-child { border-radius: 0 6px 6px 0; }
+    .stage.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .stage.done { background: #d1fae5; color: #065f46; border-color: #10b981; }
+
+    .card { background: #fff; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 12px; overflow: hidden; }
+    .card-header { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+    .card-body { padding: 16px; }
+    .card-title { font-size: 14px; font-weight: 600; }
+
+    .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+    .project-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; cursor: pointer; transition: box-shadow .15s, border-color .15s; }
+    .project-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); border-color: #6366f1; }
+    .project-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    .project-card .dept { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+    .project-card .meta { font-size: 11px; color: #94a3b8; display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+    .badge-feedback   { background: #fef3c7; color: #92400e; }
+    .badge-approved   { background: #d1fae5; color: #065f46; }
+    .badge-development{ background: #dbeafe; color: #1e40af; }
+    .badge-review     { background: #ede9fe; color: #5b21b6; }
+    .badge-done       { background: #f0fdf4; color: #166534; }
+    .badge-pending    { background: #fef9c3; color: #854d0e; }
+    .badge-rejected   { background: #fee2e2; color: #991b1b; }
+    .badge-deferred   { background: #fff7ed; color: #9a3412; }
+
+    .btn { padding: 7px 14px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-primary  { background: #6366f1; color: #fff; }
+    .btn-success  { background: #10b981; color: #fff; }
+    .btn-danger   { background: #ef4444; color: #fff; }
+    .btn-warning  { background: #f59e0b; color: #fff; }
+    .btn-ghost    { background: #f1f5f9; color: #475569; }
+    .btn-indigo   { background: #4f46e5; color: #fff; }
+    .btn-sm       { padding: 4px 10px; font-size: 12px; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 500; color: #475569; margin-bottom: 5px; }
+    .form-control { width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 7px; font-size: 13px; outline: none; font-family: inherit; }
+    .form-control:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
+    textarea.form-control { resize: vertical; min-height: 80px; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+    .modal { background: #fff; border-radius: 12px; width: 100%; max-width: 580px; max-height: 92vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+    .modal-lg { max-width: 780px; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: #fff; z-index: 1; }
+    .modal-header h3 { font-size: 15px; font-weight: 600; }
+    .modal-body { padding: 20px; }
+    .modal-footer { padding: 14px 20px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: #fff; }
+    .close-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: #94a3b8; }
+
+    .feedback-item { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 10px; transition: border-color .15s; }
+    .feedback-item.selected { border-color: #6366f1; background: #fafaff; }
+    .feedback-item.status-approved { border-left: 3px solid #10b981; }
+    .feedback-item.status-rejected { border-left: 3px solid #ef4444; opacity: .7; }
+    .feedback-item.status-deferred { border-left: 3px solid #f59e0b; opacity: .8; }
+    .f-author { font-size: 12px; font-weight: 600; color: #6366f1; }
+    .f-time   { font-size: 11px; color: #94a3b8; }
+    .f-content{ font-size: 13px; margin: 6px 0; line-height: 1.5; }
+    .vote-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .vote-btn { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+    .vote-btn:hover { background: #f1f5f9; }
+    .vote-btn.voted-up   { background: #d1fae5; border-color: #10b981; color: #065f46; }
+    .vote-btn.voted-down { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+
+    .detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 0; }
+    .back-btn { background: none; border: none; cursor: pointer; font-size: 20px; color: #6366f1; }
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #f1f5f9; overflow-x: auto; }
+    .tab { padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+    .tab.active { color: #6366f1; border-bottom-color: #6366f1; }
+
+    .version-item { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .version-tag { font-size: 13px; font-weight: 700; color: #6366f1; }
+    .version-log { font-size: 12px; color: #64748b; margin-top: 4px; line-height: 1.4; white-space: pre-wrap; }
+
+    .stats-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; min-width: 110px; text-align: center; }
+    .stat-card .num { font-size: 22px; font-weight: 700; color: #6366f1; }
+    .stat-card .lbl { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+    /* Approval gate */
+    .approval-toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; padding: 10px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .approval-toolbar span { font-size: 12px; color: #475569; font-weight: 500; }
+    .priority-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+    .priority-2 { background: #fee2e2; color: #991b1b; }
+    .priority-1 { background: #fef3c7; color: #92400e; }
+    .priority-0 { background: #f1f5f9; color: #64748b; }
+
+    /* Prompt package */
+    .prompt-box { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow-y: auto; }
+
+    /* Training */
+    .training-item { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+    .training-item .t-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .training-item .t-content { font-size: 13px; color: #475569; line-height: 1.5; white-space: pre-wrap; }
+    .training-item .t-meta { font-size: 11px; color: #94a3b8; margin-top: 6px; }
+    .type-badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+    .type-doc   { background: #dbeafe; color: #1e40af; }
+    .type-video { background: #ede9fe; color: #5b21b6; }
+    .type-link  { background: #d1fae5; color: #065f46; }
+
+    .empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 13px; }
+    .spinner { text-align: center; padding: 30px; color: #94a3b8; }
+    .search-box { width: 100%; max-width: 280px; }
+    .flex-gap { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ml-auto { margin-left: auto; }
+    .reject-reason { font-size: 11px; color: #991b1b; margin-top: 4px; font-style: italic; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <h1>DX Lifecycle</h1>
+        <p>Quản lý vòng đời phần mềm</p>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item" :class="{active: page==='projects'}" @click="goPage('projects')">
+          <span class="icon">📋</span> Dự án
+        </div>
+        <div class="nav-item" :class="{active: page==='detail'}" v-if="currentProject" @click="goPage('detail')">
+          <span class="icon">🔍</span> Chi tiết
+        </div>
+        <div class="nav-item" @click="showModuleMenu=!showModuleMenu" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px"><span class="icon">🧩</span> Modules</div>
+          <span style="font-size:10px;transition:transform .2s" :style="showModuleMenu?'transform:rotate(90deg)':''">▶</span>
+        </div>
+        <template v-if="showModuleMenu">
+          <div v-for="m in availableModules" :key="m.key"
+            style="padding:8px 16px 8px 42px;font-size:12px;color:#90c4e4;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .15s"
+            :style="page==='module-list' && currentModuleKey===m.key ? 'background:#334155' : ''"
+            @click="openModulePage(m.key)">
+            <span>{{ m.icon }}</span>
+            <div>
+              <div style="font-weight:500;color:#cbd5e1">{{ m.label }}</div>
+              <div style="font-size:10px;color:#64748b;margin-top:1px">{{ m.desc }}</div>
+            </div>
+          </div>
+        </template>
+      </nav>
+      <div class="sidebar-user">
+        👤 <span>{{ myName || 'Chưa đặt tên' }}</span><br/>
+        <span style="cursor:pointer;text-decoration:underline" @click="changeName">Đổi tên</span>
+        <div style="margin-top:10px">
+          <span v-if="!isAdmin"
+            style="cursor:pointer;font-size:11px;background:#334155;padding:4px 10px;border-radius:6px;color:#94a3b8"
+            @click="showPinModal=true">🔐 Đăng nhập IT</span>
+          <span v-else
+            style="cursor:pointer;font-size:11px;background:#166534;padding:4px 10px;border-radius:6px;color:#86efac"
+            @click="logoutAdmin">✅ IT Admin · Đăng xuất</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <!-- Projects list -->
+      <template v-if="page==='projects'">
+        <div class="topbar">
+          <h2>Danh sách Dự án</h2>
+          <div class="flex-gap">
+            <input class="form-control search-box" v-model="search" placeholder="Tìm kiếm..."/>
+            <button class="btn btn-primary" @click="openNewProject">+ Dự án mới</button>
+          </div>
+        </div>
+        <div class="content">
+          <div class="stats-row">
+            <div class="stat-card" style="cursor:pointer" @click="statusFilter=''"><div class="num">{{ projects.length }}</div><div class="lbl">Tổng dự án</div></div>
+            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='pending'?'':'pending'"><div class="num" style="color:#854d0e">{{ projects.filter(p=>p.status==='pending').length }}</div><div class="lbl">Chờ duyệt</div></div>
+            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='development'?'':'development'"><div class="num" style="color:#1e40af">{{ projects.filter(p=>p.status==='development').length }}</div><div class="lbl">Đang phát triển</div></div>
+            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='done'?'':'done'"><div class="num" style="color:#166534">{{ projects.filter(p=>p.status==='done').length }}</div><div class="lbl">Hoàn thành</div></div>
+            <div class="stat-card" style="cursor:pointer" @click="statusFilter=statusFilter==='rejected'?'':'rejected'"><div class="num" style="color:#991b1b">{{ projects.filter(p=>p.status==='rejected').length }}</div><div class="lbl">Từ chối</div></div>
+          </div>
+          <div v-if="loading" class="spinner">Đang tải...</div>
+          <div v-else-if="filteredProjects.length===0" class="empty">Chưa có dự án nào. Nhấn "+ Dự án mới" để bắt đầu.</div>
+          <div v-else class="project-grid">
+            <div class="project-card" v-for="p in filteredProjects" :key="p.id" @click="openProject(p)">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+                <h3>{{ p.title }}</h3>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span :class="'badge badge-'+p.status">{{ statusLabel(p.status) }}</span>
+                  <button v-if="isAdmin" class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:12px" @click.stop="deleteProject(p)" title="Xóa dự án">🗑</button>
+                </div>
+              </div>
+              <div class="dept">{{ p.department || 'Chưa có phòng ban' }}</div>
+              <div class="meta">
+                <span>💬 {{ p.feedback_count }} ý kiến</span>
+                <span>📦 {{ p.version_count }} phiên bản</span>
+                <span>🗓 {{ formatDate(p.created_at) }}</span>
+              </div>
+              <div style="margin-top:10px">
+                <span v-if="p.status==='pending'" style="font-size:12px;color:#854d0e">⏳ Chờ IT Admin duyệt</span>
+                <span v-else-if="p.status==='rejected'" style="font-size:12px;color:#991b1b">❌ Đã từ chối</span>
+                <button v-else class="btn btn-success btn-sm" style="width:100%" @click.stop="openApp(p)" :disabled="buildingApps[p.id]">
+                  {{ buildingApps[p.id] ? '⏳ Đang tạo ứng dụng...' : '🚀 Mở ứng dụng' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Module list page -->
+      <template v-if="page==='module-list' && currentModuleKey">
+        <div class="topbar">
+          <div class="detail-header">
+            <button class="back-btn" @click="goPage('projects')">←</button>
+            <h2>{{ availableModules.find(m=>m.key===currentModuleKey)?.icon }} {{ availableModules.find(m=>m.key===currentModuleKey)?.label }}</h2>
+          </div>
+        </div>
+        <div class="content">
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header">
+              <span class="card-title">Dự án đang dùng module này</span>
+              <span style="font-size:12px;color:#94a3b8">{{ moduleProjects.length }} dự án</span>
+            </div>
+            <div class="card-body" style="padding:0">
+              <div v-if="moduleProjects.length===0" style="padding:32px;text-align:center;color:#94a3b8;font-size:13px">
+                Chưa có dự án nào gắn module này
+              </div>
+              <div v-for="p in moduleProjects" :key="p.id"
+                style="padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .15s"
+                @mouseover="$event.currentTarget.style.background='#f8fafc'" @mouseleave="$event.currentTarget.style.background=''"
+                @click="openProjectModule(p)">
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:#1e293b">{{ p.title }}</div>
+                  <div style="font-size:12px;color:#64748b;margin-top:2px">{{ p.department || 'Chưa có phòng ban' }} · {{ p.created_at?.slice(0,10) }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span :class="'badge badge-'+p.status">{{ statusLabel(p.status) }}</span>
+                  <span style="color:#6366f1;font-size:13px;font-weight:500">Mở →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Project detail -->
+      <template v-if="page==='detail' && currentProject">
+        <div class="topbar">
+          <div class="detail-header">
+            <button class="back-btn" @click="goPage('projects')">←</button>
+            <h2>{{ currentProject.title }}</h2>
+          </div>
+          <div class="flex-gap">
+            <button class="btn btn-ghost btn-sm" @click="generatePromptPackage">📋 Xem Prompt</button>
+            <template v-if="isAdmin && currentProject.status==='pending'">
+              <button class="btn btn-primary btn-sm" @click="approveProject">✅ Chấp thuận</button>
+              <button class="btn btn-danger btn-sm" @click="rejectProject">❌ Từ chối</button>
+            </template>
+            <span v-if="currentProject.status==='rejected'" class="badge badge-rejected" style="font-size:13px;padding:5px 12px">Đã từ chối</span>
+            <template v-if="currentProject.status!=='pending' && currentProject.status!=='rejected'">
+              <button class="btn btn-success btn-sm" @click="openApp(currentProject)" :disabled="buildingApps[currentProject.id]">
+                {{ buildingApps[currentProject.id] ? '⏳ Đang tạo ứng dụng...' : '🚀 Mở ứng dụng' }}
+              </button>
+              <button v-if="isAdmin" class="btn btn-indigo btn-sm" @click="rebuildApp(currentProject)" :disabled="buildingApps[currentProject.id]">🔨 Tạo lại ứng dụng</button>
+              <button v-if="isAdmin && currentProject.status==='development'" class="btn btn-sm" style="background:#10b981;color:#fff" @click="markDone(currentProject)">✅ Hoàn thành</button>
+            </template>
+          </div>
+        </div>
+        <div class="content">
+
+          <!-- Info card -->
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header">
+              <span class="card-title">Thông tin dự án</span>
+              <button v-if="isAdmin" class="btn btn-ghost btn-sm" @click="openEditProject">✏️ Sửa</button>
+            </div>
+            <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+              <div><span style="font-size:11px;color:#94a3b8">Phòng ban</span><div style="font-size:13px;margin-top:2px">{{ currentProject.department || '-' }}</div></div>
+              <div><span style="font-size:11px;color:#94a3b8">Người đề xuất / Liên hệ</span><div style="font-size:13px;margin-top:2px">{{ currentProject.contact || '-' }}</div></div>
+              <div><span style="font-size:11px;color:#94a3b8">Mức độ ưu tiên</span>
+                <div style="font-size:13px;margin-top:2px">
+                  <span v-if="currentProject.priority==='high'" style="color:#ef4444;font-weight:600">● Cao</span>
+                  <span v-else-if="currentProject.priority==='medium'" style="color:#f59e0b;font-weight:600">● Trung bình</span>
+                  <span v-else-if="currentProject.priority==='low'" style="color:#22c55e;font-weight:600">● Thấp</span>
+                  <span v-else style="color:#94a3b8">-</span>
+                </div>
+              </div>
+              <div><span style="font-size:11px;color:#94a3b8">Ngày họp</span><div style="font-size:13px;margin-top:2px">{{ currentProject.meeting_date || '-' }}</div></div>
+              <div><span style="font-size:11px;color:#94a3b8">Thời hạn mong muốn</span><div style="font-size:13px;margin-top:2px">{{ currentProject.deadline || '-' }}</div></div>
+              <div><span style="font-size:11px;color:#94a3b8">Số người dùng dự kiến</span><div style="font-size:13px;margin-top:2px">{{ currentProject.expected_users || '-' }}</div></div>
+              <div style="grid-column:1/-1"><span style="font-size:11px;color:#94a3b8">Vấn đề cần giải quyết</span><div style="font-size:13px;margin-top:2px;line-height:1.5">{{ currentProject.problem || '-' }}</div></div>
+              <div style="grid-column:1/-1"><span style="font-size:11px;color:#94a3b8">Mục tiêu / Kết quả mong đợi</span><div style="font-size:13px;margin-top:2px;line-height:1.5">{{ currentProject.expected_outcome || '-' }}</div></div>
+              <div v-if="currentProject.demo_link" style="grid-column:1/-1"><span style="font-size:11px;color:#94a3b8">Link demo / tài liệu</span><div style="font-size:13px;margin-top:2px"><a :href="currentProject.demo_link" target="_blank" style="color:#6366f1">{{ currentProject.demo_link }}</a></div></div>
+              <div style="border-top:1px solid #f1f5f9;grid-column:1/-1;padding-top:10px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+                <div><span style="font-size:11px;color:#94a3b8">Người tạo phiếu</span><div style="font-size:13px;margin-top:2px">{{ currentProject.created_by || '-' }}</div></div>
+                <div><span style="font-size:11px;color:#94a3b8">Ngày tạo</span><div style="font-size:13px;margin-top:2px">{{ formatDate(currentProject.created_at) }}</div></div>
+                <div v-if="projectAttachments.length">
+                  <span style="font-size:11px;color:#94a3b8">File đính kèm ({{ projectAttachments.length }})</span>
+                  <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px">
+                    <div v-for="att in projectAttachments" :key="att.id" style="display:flex;align-items:center;gap:4px;background:#f0f0ff;border-radius:6px;padding:3px 8px">
+                      <a :href="'/api/projects/'+currentProject.id+'/download/'+att.id" target="_blank"
+                        style="font-size:12px;color:#6366f1;text-decoration:none">📎 {{ att.original_name }}</a>
+                      <button v-if="isAdmin" @click="deleteAttachment(att)" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:12px;padding:0 2px">×</button>
+                    </div>
+                    <label v-if="isAdmin" style="font-size:12px;color:#6366f1;cursor:pointer;background:#f0f0ff;border-radius:6px;padding:3px 8px;border:1px dashed #6366f1">
+                      + Thêm file
+                      <input type="file" multiple style="display:none" @change="uploadMoreFiles" accept=".xlsx,.xls,.pdf,.doc,.docx,.png,.jpg"/>
+                    </label>
+                  </div>
+                </div>
+                <div v-else-if="isAdmin">
+                  <span style="font-size:11px;color:#94a3b8">File đính kèm</span>
+                  <div style="margin-top:4px">
+                    <label style="font-size:12px;color:#6366f1;cursor:pointer;background:#f0f0ff;border-radius:6px;padding:3px 8px;border:1px dashed #6366f1">
+                      + Thêm file
+                      <input type="file" multiple style="display:none" @change="uploadMoreFiles" accept=".xlsx,.xls,.pdf,.doc,.docx,.png,.jpg"/>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Module selector card -->
+          <div v-if="isAdmin" class="card" style="margin-bottom:16px">
+            <div class="card-header">
+              <span class="card-title">🧩 Module ứng dụng</span>
+              <span style="font-size:12px;color:#94a3b8">Gắn ứng dụng thực tế vào dự án này</span>
+            </div>
+            <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;padding:14px 16px">
+              <div v-for="m in availableModules" :key="m.key"
+                style="border:2px solid;border-radius:10px;padding:12px 16px;cursor:pointer;transition:all .15s;min-width:180px;flex:1"
+                :style="currentProject.module_type===m.key ? 'border-color:#6366f1;background:#fafaff' : 'border-color:#e2e8f0;background:#fff'"
+                @click="setModule(m.key)">
+                <div style="font-size:22px;margin-bottom:4px">{{ m.icon }}</div>
+                <div style="font-size:13px;font-weight:600">{{ m.label }}</div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:2px">{{ m.desc }}</div>
+                <div v-if="currentProject.module_type===m.key" style="margin-top:8px;font-size:11px;font-weight:600;color:#6366f1">✓ Đang sử dụng</div>
+              </div>
+              <div style="border:2px dashed #e2e8f0;border-radius:10px;padding:12px 16px;cursor:pointer;min-width:140px;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8"
+                :style="!currentProject.module_type ? 'border-color:#cbd5e1;background:#f8fafc' : ''"
+                @click="setModule('')">
+                <div style="font-size:22px;margin-bottom:4px">⊘</div>
+                <div style="font-size:12px;font-weight:500">Không có module</div>
+                <div v-if="!currentProject.module_type" style="margin-top:6px;font-size:11px;font-weight:600;color:#475569">✓ Hiện tại</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="tab-bar">
+            <div class="tab" :class="{active:tab==='feedback'}" @click="tab='feedback'">💬 Ý kiến ({{ feedbackList.length }})</div>
+            <div class="tab" :class="{active:tab==='versions'}" @click="tab='versions';loadVersions()">📦 Phiên bản ({{ versionList.length }})</div>
+            <div class="tab" :class="{active:tab==='training'}" @click="tab='training';loadTraining()">🎓 Đào tạo ({{ trainingList.length }})</div>
+            <div v-if="currentProject.module_type" class="tab" :class="{active:tab==='module'}" @click="tab='module';loadCmClasses()">🏫 {{ moduleLabel(currentProject.module_type) }}</div>
+            <div class="tab" :class="{active:tab==='logs'}" @click="tab='logs';loadTaskLogs()">🤖 Nhật ký Claude <span v-if="taskLogs.length" style="background:#ef4444;color:#fff;border-radius:10px;padding:0 5px;font-size:10px;margin-left:3px">{{ taskLogs.length }}</span></div>
+          </div>
+
+          <!-- Feedback tab -->
+          <div v-if="tab==='feedback'">
+            <div class="card" style="margin-bottom:14px">
+              <div class="card-body">
+                <div class="form-group">
+                  <label>Họ tên / Phòng ban</label>
+                  <input class="form-control" v-model="newFeedback.author" placeholder="Nguyễn Văn A - Phòng Sản xuất"/>
+                </div>
+                <div class="form-group" style="margin-bottom:8px">
+                  <label>Nội dung ý kiến</label>
+                  <textarea class="form-control" v-model="newFeedback.content" placeholder="Nhập ý kiến, góp ý, yêu cầu..."></textarea>
+                </div>
+                <button class="btn btn-primary btn-sm" @click="submitFeedback">Gửi ý kiến</button>
+              </div>
+            </div>
+            <div v-if="feedbackList.length===0" class="empty">Chưa có ý kiến nào.</div>
+            <div v-for="f in feedbackList" :key="f.id" class="feedback-item" :class="'status-'+f.status">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                <div>
+                  <span class="f-author">{{ f.author }}</span>
+                  <span class="f-time" style="margin-left:8px">{{ formatDate(f.created_at) }}</span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+                  <span :class="'badge badge-'+f.status">{{ feedbackStatusLabel(f.status) }}</span>
+                  <button v-if="f.status !== 'approved'" class="btn btn-success btn-sm" :disabled="!isAdmin" @click="quickApproveFeedback(f)">✅ Duyệt</button>
+                  <button v-if="f.status !== 'rejected'" class="btn btn-danger btn-sm" :disabled="!isAdmin" @click="quickRejectFeedback(f)">❌ Từ chối</button>
+                  <button v-if="isAdmin" class="btn btn-ghost btn-sm" @click="deleteFeedback(f)">🗑</button>
+                </div>
+              </div>
+              <div class="f-content">{{ f.content }}</div>
+              <div v-if="f.reject_reason" class="reject-reason">Lý do từ chối: {{ f.reject_reason }}</div>
+              <div class="vote-bar">
+                <button class="vote-btn" :class="{'voted-up': myVote(f.id)==='up'}" @click="vote(f, 'up')">👍 {{ f.votes_up }}</button>
+                <button class="vote-btn" :class="{'voted-down': myVote(f.id)==='down'}" @click="vote(f, 'down')">👎 {{ f.votes_down }}</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Approval Gate tab -->
+
+          <!-- Versions tab -->
+          <div v-if="tab==='versions'">
+            <div class="card" style="margin-bottom:14px">
+              <div class="card-body">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div class="form-group">
+                    <label>Phiên bản</label>
+                    <input class="form-control" v-model="newVersion.version" placeholder="v1.0, v1.1..."/>
+                  </div>
+                  <div class="form-group">
+                    <label>Link demo/phần mềm</label>
+                    <input class="form-control" v-model="newVersion.demo_link" placeholder="http://..."/>
+                  </div>
+                  <div class="form-group" style="grid-column:1/-1">
+                    <label>Ghi chú thay đổi</label>
+                    <textarea class="form-control" v-model="newVersion.changelog" placeholder="- Thêm tính năng A&#10;- Sửa lỗi B"></textarea>
+                  </div>
+                </div>
+                <button class="btn btn-success btn-sm" @click="submitVersion">+ Thêm phiên bản</button>
+              </div>
+            </div>
+            <div v-if="versionList.length===0" class="empty">Chưa có phiên bản nào.</div>
+            <div v-for="v in versionList" :key="v.id" class="version-item">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                  <span class="version-tag">{{ v.version }}</span>
+                  <span :class="'badge badge-'+v.status">{{ statusLabel(v.status) }}</span>
+                  <span style="font-size:11px;color:#94a3b8">{{ formatDate(v.created_at) }}</span>
+                </div>
+                <div class="version-log">{{ v.changelog }}</div>
+                <div v-if="v.demo_link" style="margin-top:6px;font-size:12px">
+                  <a :href="v.demo_link" target="_blank" style="color:#6366f1">🔗 {{ v.demo_link }}</a>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:#64748b">✅ {{ v.accepted_count }} người đã xác nhận</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <button class="btn btn-ghost btn-sm" @click="openAcceptance(v)">Nghiệm thu</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Training Center tab -->
+          <div v-if="tab==='training'">
+            <div class="card" style="margin-bottom:14px">
+              <div class="card-body">
+                <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+                  <div class="form-group" style="margin-bottom:0">
+                    <label>Tiêu đề tài liệu *</label>
+                    <input class="form-control" v-model="newTraining.title" placeholder="VD: Hướng dẫn sử dụng module A"/>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label>Loại</label>
+                    <select class="form-control" v-model="newTraining.type">
+                      <option value="doc">📄 Tài liệu</option>
+                      <option value="video">🎬 Video</option>
+                      <option value="link">🔗 Link</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group" style="margin-top:10px">
+                  <label>Nội dung / Link / Mô tả</label>
+                  <textarea class="form-control" v-model="newTraining.content" placeholder="Nhập nội dung hướng dẫn hoặc link tài liệu..."></textarea>
+                </div>
+                <button class="btn btn-primary btn-sm" @click="submitTraining">+ Thêm tài liệu</button>
+              </div>
+            </div>
+            <div v-if="trainingList.length===0" class="empty">Chưa có tài liệu đào tạo nào.</div>
+            <div v-for="t in trainingList" :key="t.id" class="training-item">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <span :class="'type-badge type-'+t.type" style="margin-right:8px">{{ t.type==='doc'?'📄 Tài liệu':t.type==='video'?'🎬 Video':'🔗 Link' }}</span>
+                  <span class="t-title" style="display:inline">{{ t.title }}</span>
+                </div>
+                <button class="btn btn-danger btn-sm" @click="deleteTraining(t)">🗑</button>
+              </div>
+              <div class="t-content" style="margin-top:8px">{{ t.content }}</div>
+              <div class="t-meta">{{ t.created_by ? '👤 '+t.created_by+' · ' : '' }}{{ formatDate(t.created_at) }}</div>
+            </div>
+          </div>
+          <!-- Module tab -->
+          <div v-if="tab==='module' && currentProject.module_type==='class_manager'">
+            <!-- Class list or class detail -->
+            <template v-if="!cmCurrentClass">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                <span style="font-size:13px;font-weight:600;color:#475569">{{ cmClasses.length }} lớp học</span>
+                <button class="btn btn-primary btn-sm" @click="openNewCmClass">+ Thêm lớp</button>
+              </div>
+              <div v-if="cmClasses.length===0" class="empty">Chưa có lớp học nào.</div>
+              <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">
+                <div v-for="c in cmClasses" :key="c.id"
+                  style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;cursor:pointer;transition:box-shadow .15s"
+                  @click="openCmClass(c)"
+                  @mouseover="$event.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'"
+                  @mouseout="$event.currentTarget.style.boxShadow=''">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+                    <b style="font-size:14px">{{ c.name }}</b>
+                    <span :class="'badge badge-'+(c.status==='active'?'approved':c.status==='finished'?'development':'pending')">
+                      {{ c.status==='active'?'Đang học':c.status==='finished'?'Kết thúc':'Tạm dừng' }}
+                    </span>
+                  </div>
+                  <div style="font-size:12px;color:#6366f1;margin-bottom:8px">👨‍🏫 {{ c.teacher || 'Chưa có giáo viên' }}</div>
+                  <div style="font-size:11px;color:#94a3b8;display:flex;gap:10px;flex-wrap:wrap">
+                    <span>👥 {{ c.student_count }}/{{ c.max_students }}</span>
+                    <span v-if="c.schedule">🗓 {{ c.schedule }}</span>
+                  </div>
+                  <div style="background:#e2e8f0;border-radius:4px;height:4px;margin-top:10px;overflow:hidden">
+                    <div style="background:#6366f1;height:100%;border-radius:4px;transition:width .3s" :style="{width:Math.min(100,(c.student_count/c.max_students*100))+'%'}"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Class detail (students) -->
+            <template v-else>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                <button class="back-btn" @click="cmCurrentClass=null;cmStudents=[];cmSubTab='students'">←</button>
+                <b style="font-size:15px">{{ cmCurrentClass.name }}</b>
+                <button class="btn btn-ghost btn-sm" @click="openEditCmClass(cmCurrentClass)">✏️ Sửa</button>
+                <div class="ml-auto flex-gap">
+                  <button class="btn btn-sm" :style="cmSubTab==='students'?'background:#6366f1;color:#fff':'background:#f1f5f9;color:#475569'" @click="cmSubTab='students'">👥 Học viên</button>
+                  <button class="btn btn-sm" :style="cmSubTab==='attendance'?'background:#6366f1;color:#fff':'background:#f1f5f9;color:#475569'" @click="cmSubTab='attendance';loadAttendance()">📋 Điểm danh</button>
+                  <button class="btn btn-sm" :style="cmSubTab==='scores'?'background:#6366f1;color:#fff':'background:#f1f5f9;color:#475569'" @click="cmSubTab='scores';loadScores()">📝 Bảng điểm</button>
+                </div>
+              </div>
+              <!-- Sub-tab: Học viên -->
+              <div v-if="cmSubTab==='students'">
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                  <input class="form-control" style="width:200px;font-size:12px" v-model="cmSearch" placeholder="Tìm học viên..." @input="searchCmStudents"/>
+                  <button class="btn btn-primary btn-sm" @click="openAddCmStudent">+ Thêm học viên</button>
+                </div>
+                <div v-if="cmStudents.length===0" class="empty">Chưa có học viên nào.</div>
+                <div v-else style="overflow-x:auto">
+                  <table style="width:100%;border-collapse:collapse;font-size:13px">
+                    <thead>
+                      <tr>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">#</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Họ tên</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">SĐT</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Email</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Ngày sinh</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Ghi chú</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(s,i) in cmStudents" :key="s.id">
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;color:#94a3b8;font-size:12px">{{ i+1 }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-weight:500">{{ s.full_name }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9">{{ s.phone || '-' }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:12px">{{ s.email || '-' }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:12px">{{ s.dob || '-' }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.note || '-' }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9">
+                          <div style="display:flex;gap:6px">
+                            <button class="btn btn-ghost btn-sm" @click="openEditCmStudent(s)">✏️</button>
+                            <button class="btn btn-sm" style="background:#f59e0b;color:#fff;font-size:11px" @click="openTransferModal(s)">🔄</button>
+                            <button class="btn btn-danger btn-sm" @click="deleteCmStudent(s)">🗑</button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Sub-tab: Điểm danh -->
+              <div v-if="cmSubTab==='attendance'">
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+                  <label style="font-size:12px;font-weight:600;color:#475569">Ngày:</label>
+                  <input type="date" class="form-control" style="width:160px;font-size:12px" v-model="attendanceDate" @change="loadAttendance"/>
+                  <button class="btn btn-primary btn-sm" @click="saveAttendance" :disabled="attendanceRecords.length===0">💾 Lưu điểm danh</button>
+                  <div class="ml-auto">
+                    <button class="btn btn-ghost btn-sm" @click="loadAttendanceSummary">📊 Thống kê tuần</button>
+                  </div>
+                </div>
+
+                <!-- Bảng điểm danh -->
+                <div v-if="attendanceRecords.length===0" class="empty">Chưa có học viên nào trong lớp.</div>
+                <div v-else style="overflow-x:auto">
+                  <table style="width:100%;border-collapse:collapse;font-size:13px">
+                    <thead>
+                      <tr>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">#</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Họ tên</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Có mặt</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Vắng</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Trễ</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Ghi chú</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(r,i) in attendanceRecords" :key="r.student_id" :style="r.status==='absent'?'background:#fef2f2':r.status==='late'?'background:#fffbeb':''">
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;color:#94a3b8;font-size:12px">{{ i+1 }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-weight:500">{{ r.full_name }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;text-align:center">
+                          <input type="radio" :name="'att_'+r.student_id" value="present" v-model="r.status"/>
+                        </td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;text-align:center">
+                          <input type="radio" :name="'att_'+r.student_id" value="absent" v-model="r.status"/>
+                        </td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;text-align:center">
+                          <input type="radio" :name="'att_'+r.student_id" value="late" v-model="r.status"/>
+                        </td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9">
+                          <input class="form-control" style="font-size:11px;padding:4px 8px" v-model="r.note" placeholder="..."/>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Thống kê tuần -->
+                <div v-if="attendanceSummary.length>0" style="margin-top:16px;border:1px solid #e2e8f0;border-radius:10px;padding:14px;background:#fff">
+                  <div style="font-weight:600;font-size:13px;color:#475569;margin-bottom:10px">📊 Thống kê tuần (từ {{ attendanceWeekStart }})</div>
+                  <table style="width:100%;border-collapse:collapse;font-size:13px">
+                    <thead>
+                      <tr>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Họ tên</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#10b981;padding:8px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Có mặt</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#ef4444;padding:8px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Vắng</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#f59e0b;padding:8px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Trễ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="s in attendanceSummary" :key="s.id">
+                        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-weight:500">{{ s.full_name }}</td>
+                        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:center;color:#10b981;font-weight:600">{{ s.present_count }}</td>
+                        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:center;color:#ef4444;font-weight:600">{{ s.absent_count }}</td>
+                        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:center;color:#f59e0b;font-weight:600">{{ s.late_count }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Sub-tab: Bảng điểm -->
+              <div v-if="cmSubTab==='scores'">
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+                  <span style="font-size:13px;font-weight:600;color:#475569">Điểm 3 môn: Toán - Văn - Anh</span>
+                  <button class="btn btn-primary btn-sm ml-auto" @click="saveScores" :disabled="scoreRecords.length===0">💾 Lưu điểm</button>
+                </div>
+                <div v-if="scoreRecords.length===0" class="empty">Chưa có học viên nào trong lớp.</div>
+                <div v-else style="overflow-x:auto">
+                  <table style="width:100%;border-collapse:collapse;font-size:13px">
+                    <thead>
+                      <tr>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">#</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#475569;padding:10px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Họ tên</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#1e40af;padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Toán</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#065f46;padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Văn</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#92400e;padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0">Anh</th>
+                        <th style="background:#f8fafc;font-weight:600;font-size:12px;color:#6366f1;padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0">TB</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(r,i) in scoreRecords" :key="r.student_id">
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;color:#94a3b8;font-size:12px">{{ i+1 }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-weight:500">{{ r.full_name }}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;text-align:center">
+                          <input type="number" min="0" max="10" step="0.1" class="form-control" style="width:70px;text-align:center;font-size:13px;padding:4px;margin:0 auto" v-model.number="r.toan"/>
+                        </td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;text-align:center">
+                          <input type="number" min="0" max="10" step="0.1" class="form-control" style="width:70px;text-align:center;font-size:13px;padding:4px;margin:0 auto" v-model.number="r.van"/>
+                        </td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;text-align:center">
+                          <input type="number" min="0" max="10" step="0.1" class="form-control" style="width:70px;text-align:center;font-size:13px;padding:4px;margin:0 auto" v-model.number="r.anh"/>
+                        </td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:600;color:#6366f1">
+                          {{ r.toan != null && r.van != null && r.anh != null ? ((r.toan + r.van + r.anh) / 3).toFixed(1) : '-' }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Claude Log tab -->
+          <div v-if="tab==='logs'">
+            <div v-if="waitingClaude" style="padding:30px;text-align:center;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;margin-bottom:12px">
+              <div style="font-size:28px;margin-bottom:8px;animation:pulse 1.5s infinite">🤖</div>
+              <div style="font-weight:600;color:#c2410c;font-size:14px">Đã gửi về Claude Code</div>
+              <div style="color:#9a3412;font-size:12px;margin-top:4px">Đang chờ Claude Code xử lý... (tự động làm mới mỗi 5 giây)</div>
+            </div>
+            <div v-if="claudeDoneMessage && !waitingClaude" style="padding:20px;text-align:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:12px">
+              <div style="font-size:15px;font-weight:600;color:#166534">{{ claudeDoneMessage }}</div>
+              <div style="font-size:12px;color:#15803d;margin-top:4px">Xem chi tiết bên dưới</div>
+            </div>
+            <div v-if="taskLogs.length===0 && !waitingClaude" class="empty" style="padding:40px;text-align:center;color:#94a3b8">
+              Chưa có nhật ký nào. Claude Code sẽ báo kết quả về đây sau khi hoàn thành.
+            </div>
+            <div v-for="log in taskLogs" :key="log.id" style="border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:10px;background:#fff"
+              :style="log.status==='success'?'border-left:4px solid #10b981':log.status==='failed'?'border-left:4px solid #ef4444':log.status==='partial'?'border-left:4px solid #f59e0b':'border-left:4px solid #6366f1'">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-size:18px">{{ {success:'✅',partial:'⚠️',failed:'❌',need_info:'❓'}[log.status] }}</span>
+                  <span style="font-size:13px;font-weight:600;color:#1e293b">{{ {success:'Hoàn thành',partial:'Một phần',failed:'Thất bại',need_info:'Cần thêm thông tin'}[log.status] }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:11px;color:#94a3b8">{{ formatDate(log.created_at) }}</span>
+                  <button class="btn btn-ghost btn-sm" @click="deleteTaskLog(log.id)" style="padding:2px 8px;font-size:11px">🗑</button>
+                </div>
+              </div>
+              <div style="font-size:13px;color:#334155;line-height:1.6;white-space:pre-wrap">{{ log.message }}</div>
+              <div v-if="log.files_changed" style="margin-top:8px;padding:8px 10px;background:#f8fafc;border-radius:6px;font-size:11px;color:#475569">
+                <span style="font-weight:600">Các file đã thay đổi:</span> {{ log.files_changed }}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Modal: New Project -->
+  <div class="modal-overlay" v-if="showNewProject" @click.self="showNewProject=false">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Tạo dự án mới</h3>
+        <button class="close-btn" @click="showNewProject=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>Tên dự án *</label><input class="form-control" v-model="newProject.title" placeholder="VD: Hệ thống quét QR chấm công"/></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group"><label>Phòng ban đề xuất</label><input class="form-control" v-model="newProject.department" placeholder="VD: Phòng Sản xuất"/></div>
+          <div class="form-group"><label>Người đề xuất / Liên hệ</label><input class="form-control" v-model="newProject.contact" placeholder="Họ tên, SĐT hoặc email"/></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div class="form-group"><label>Ngày họp</label><input type="date" class="form-control" v-model="newProject.meeting_date"/></div>
+          <div class="form-group"><label>Thời hạn mong muốn</label><input type="date" class="form-control" v-model="newProject.deadline"/></div>
+          <div class="form-group">
+            <label>Mức độ ưu tiên</label>
+            <select class="form-control" v-model="newProject.priority">
+              <option value="">-- Chọn --</option>
+              <option value="high">Cao</option>
+              <option value="medium">Trung bình</option>
+              <option value="low">Thấp</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label>Vấn đề cần giải quyết</label><textarea class="form-control" v-model="newProject.problem" placeholder="Mô tả vấn đề, bối cảnh hiện tại..."></textarea></div>
+        <div class="form-group"><label>Mục tiêu / Kết quả mong đợi</label><textarea class="form-control" v-model="newProject.expected_outcome" placeholder="Đạt được gì sau khi có phần mềm? Đo lường thế nào?"></textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group"><label>Số người dùng dự kiến</label><input class="form-control" v-model="newProject.expected_users" placeholder="VD: 20 nhân viên, 3 phòng ban"/></div>
+          <div class="form-group"><label>Link demo / tài liệu tham khảo</label><input class="form-control" v-model="newProject.demo_link" placeholder="http://..."/></div>
+        </div>
+        <div class="form-group"><label>Người tạo phiếu</label><input class="form-control" v-model="newProject.created_by" placeholder="Họ tên"/></div>
+        <div class="form-group">
+          <label>File đính kèm (Excel, PDF... tối đa 20MB mỗi file)</label>
+          <input type="file" class="form-control" multiple @change="onAttachFile" accept=".xlsx,.xls,.pdf,.doc,.docx,.png,.jpg"/>
+          <div v-if="attachFiles.length" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
+            <span v-for="(f,i) in attachFiles" :key="i" style="font-size:12px;color:#6366f1;background:#f0f0ff;padding:2px 8px;border-radius:4px">📎 {{ f.name }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showNewProject=false">Hủy</button>
+        <button class="btn btn-primary" @click="createProject">Tạo dự án</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Project -->
+  <div class="modal-overlay" v-if="showEditProject" @click.self="showEditProject=false">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Sửa thông tin dự án</h3>
+        <button class="close-btn" @click="showEditProject=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>Tên dự án *</label><input class="form-control" v-model="editProject.title"/></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group"><label>Phòng ban</label><input class="form-control" v-model="editProject.department"/></div>
+          <div class="form-group"><label>Người đề xuất / Liên hệ</label><input class="form-control" v-model="editProject.contact"/></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div class="form-group"><label>Ngày họp</label><input type="date" class="form-control" v-model="editProject.meeting_date"/></div>
+          <div class="form-group"><label>Thời hạn</label><input type="date" class="form-control" v-model="editProject.deadline"/></div>
+          <div class="form-group"><label>Ưu tiên</label>
+            <select class="form-control" v-model="editProject.priority">
+              <option value="">-- Chọn --</option>
+              <option value="high">Cao</option>
+              <option value="medium">Trung bình</option>
+              <option value="low">Thấp</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label>Vấn đề cần giải quyết</label><textarea class="form-control" v-model="editProject.problem"></textarea></div>
+        <div class="form-group"><label>Mục tiêu / Kết quả mong đợi</label><textarea class="form-control" v-model="editProject.expected_outcome"></textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group"><label>Số người dùng dự kiến</label><input class="form-control" v-model="editProject.expected_users"/></div>
+          <div class="form-group"><label>Link demo / tài liệu</label><input class="form-control" v-model="editProject.demo_link"/></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showEditProject=false">Hủy</button>
+        <button class="btn btn-primary" @click="saveEditProject">Lưu thay đổi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: PIN Login -->
+  <div class="modal-overlay" v-if="showPinModal" @click.self="showPinModal=false">
+    <div class="modal" style="max-width:340px">
+      <div class="modal-header">
+        <h3>🔐 Đăng nhập IT Admin</h3>
+        <button class="close-btn" @click="showPinModal=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nhập PIN</label>
+          <input class="form-control" type="password" v-model="pinInput" placeholder="••••"
+            @keyup.enter="submitPin" style="font-size:20px;letter-spacing:6px;text-align:center"/>
+        </div>
+        <div v-if="pinError" style="color:#ef4444;font-size:12px;margin-top:4px">{{ pinError }}</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showPinModal=false">Hủy</button>
+        <button class="btn btn-primary" @click="submitPin">Xác nhận</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: CM Class -->
+  <div class="modal-overlay" v-if="showCmClassModal" @click.self="showCmClassModal=false">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>{{ cmEditingClass ? 'Sửa lớp học' : 'Thêm lớp học mới' }}</h3>
+        <button class="close-btn" @click="showCmClassModal=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>Tên lớp *</label><input class="form-control" v-model="cmClassForm.name" placeholder="VD: Lớp Tin học K1"/></div>
+        <div class="form-group"><label>Giảng viên</label><input class="form-control" v-model="cmClassForm.teacher" placeholder="Họ tên giảng viên"/></div>
+        <div class="form-group"><label>Lịch học</label><input class="form-control" v-model="cmClassForm.schedule" placeholder="VD: T2,4,6 — 18:00-20:00"/></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group"><label>Ngày khai giảng</label><input type="date" class="form-control" v-model="cmClassForm.start_date"/></div>
+          <div class="form-group"><label>Ngày kết thúc</label><input type="date" class="form-control" v-model="cmClassForm.end_date"/></div>
+          <div class="form-group"><label>Sĩ số tối đa</label><input type="number" class="form-control" v-model="cmClassForm.max_students" min="1"/></div>
+          <div class="form-group" v-if="cmEditingClass"><label>Trạng thái</label>
+            <select class="form-control" v-model="cmClassForm.status">
+              <option value="active">Đang học</option>
+              <option value="inactive">Tạm dừng</option>
+              <option value="finished">Đã kết thúc</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label>Mô tả</label><textarea class="form-control" v-model="cmClassForm.description" placeholder="Nội dung, đối tượng..."></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showCmClassModal=false">Hủy</button>
+        <button v-if="cmEditingClass" class="btn btn-danger btn-sm" style="margin-right:auto" @click="deleteCmClass(cmEditingClass)">🗑 Xóa lớp</button>
+        <button class="btn btn-primary" @click="saveCmClass">{{ cmEditingClass ? 'Lưu' : 'Tạo lớp' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: CM Student -->
+  <div class="modal-overlay" v-if="showCmStudentModal" @click.self="showCmStudentModal=false">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>{{ cmEditingStudent ? 'Sửa học viên' : 'Thêm học viên mới' }}</h3>
+        <button class="close-btn" @click="showCmStudentModal=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>Họ tên *</label><input class="form-control" v-model="cmStudentForm.full_name" placeholder="Nguyễn Văn A"/></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group"><label>Số điện thoại</label><input class="form-control" v-model="cmStudentForm.phone" placeholder="0901234567"/></div>
+          <div class="form-group"><label>Email</label><input class="form-control" v-model="cmStudentForm.email" placeholder="email@gmail.com"/></div>
+          <div class="form-group"><label>Ngày sinh</label><input type="date" class="form-control" v-model="cmStudentForm.dob"/></div>
+          <div class="form-group" v-if="cmEditingStudent"><label>Trạng thái</label>
+            <select class="form-control" v-model="cmStudentForm.status">
+              <option value="active">Đang học</option>
+              <option value="inactive">Nghỉ học</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label>Địa chỉ</label><input class="form-control" v-model="cmStudentForm.address"/></div>
+        <div class="form-group"><label>Ghi chú</label><textarea class="form-control" v-model="cmStudentForm.note"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showCmStudentModal=false">Hủy</button>
+        <button class="btn btn-primary" @click="saveCmStudent">{{ cmEditingStudent ? 'Lưu' : 'Thêm' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Chuyển lớp -->
+  <div class="modal-overlay" v-if="showTransferModal" @click.self="showTransferModal=false">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🔄 Chuyển lớp</h3>
+        <button class="close-btn" @click="showTransferModal=false">×</button>
+      </div>
+      <div class="modal-body" v-if="transferStudent">
+        <div style="background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px">
+          <b>{{ transferStudent.full_name }}</b>
+          <span style="color:#64748b;margin-left:8px">Lớp hiện tại: <b>{{ cmCurrentClass?.name }}</b></span>
+        </div>
+        <div class="form-group">
+          <label>Chuyển sang lớp</label>
+          <select class="form-control" v-model="transferTargetClassId">
+            <option value="">-- Chọn lớp --</option>
+            <option v-for="c in cmClasses.filter(c => c.id !== cmCurrentClass?.id)" :key="c.id" :value="c.id">
+              {{ c.name }} ({{ c.student_count }}/{{ c.max_students }}) — {{ c.teacher || 'Chưa có giáo viên' }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showTransferModal=false">Hủy</button>
+        <button class="btn btn-primary" @click="confirmTransfer" :disabled="!transferTargetClassId">Xác nhận chuyển</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Approve single feedback -->
+  <div class="modal-overlay" v-if="showApproveModal" @click.self="showApproveModal=false">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Phê duyệt ý kiến</h3>
+        <button class="close-btn" @click="showApproveModal=false">×</button>
+      </div>
+      <div class="modal-body" v-if="approveTarget">
+        <div style="background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px">
+          <b>{{ approveTarget.author }}</b><br/>
+          <span style="color:#475569">{{ approveTarget.content }}</span>
+        </div>
+        <div class="form-group">
+          <label>Quyết định</label>
+          <select class="form-control" v-model="approveDecision">
+            <option value="approved">✅ Duyệt — đưa vào phát triển</option>
+            <option value="deferred">⏸ Hoãn — xem xét sau</option>
+            <option value="rejected">❌ Từ chối</option>
+          </select>
+        </div>
+        <div class="form-group" v-if="approveDecision==='rejected'">
+          <label>Lý do từ chối</label>
+          <textarea class="form-control" v-model="approveReason" placeholder="Nêu lý do..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Mức ưu tiên</label>
+          <select class="form-control" v-model="approvePriority">
+            <option :value="0">Thấp</option>
+            <option :value="1">Trung bình</option>
+            <option :value="2">Cao</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showApproveModal=false">Hủy</button>
+        <button class="btn btn-primary" @click="confirmApprove">Xác nhận</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Prompt Package -->
+  <div class="modal-overlay" v-if="showPromptModal" @click.self="showPromptModal=false">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>🤖 Prompt Package — {{ currentProject?.title }}</h3>
+        <button class="close-btn" @click="showPromptModal=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;color:#64748b">{{ promptData.feedback_count }} yêu cầu đã phê duyệt được đưa vào prompt</span>
+          <button class="btn btn-ghost btn-sm" @click="copyPrompt">📋 Copy</button>
+        </div>
+        <div class="prompt-box">{{ promptData.prompt }}</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showPromptModal=false">Đóng</button>
+        <button class="btn btn-primary" @click="copyPrompt">📋 Copy toàn bộ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Acceptance -->
+  <div class="modal-overlay" v-if="showAcceptance" @click.self="showAcceptance=false">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Nghiệm thu — {{ acceptanceVersion?.version }}</h3>
+        <button class="close-btn" @click="showAcceptance=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:14px">
+          <div v-for="a in acceptanceList" :key="a.id" style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #f1f5f9;border-radius:6px;margin-bottom:6px;font-size:12px">
+            <div style="flex:1"><b>{{ a.person }}</b> <span style="color:#94a3b8">{{ a.department }}</span></div>
+            <span>{{ a.confirmed_use ? '✅ Đã dùng' : '⏳ Chưa' }}</span>
+            <span>{{ a.confirmed_trained ? '✅ Đã đào tạo' : '⏳ Chưa' }}</span>
+          </div>
+          <div v-if="acceptanceList.length===0" style="color:#94a3b8;font-size:12px;text-align:center;padding:12px">Chưa có ai xác nhận</div>
+        </div>
+        <hr style="margin-bottom:14px;border-color:#f1f5f9"/>
+        <div class="form-group"><label>Họ tên *</label><input class="form-control" v-model="newAcceptance.person"/></div>
+        <div class="form-group"><label>Phòng ban</label><input class="form-control" v-model="newAcceptance.department"/></div>
+        <div style="display:flex;gap:16px;margin-bottom:14px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+            <input type="checkbox" v-model="newAcceptance.confirmed_use"/> Đã sử dụng phần mềm
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+            <input type="checkbox" v-model="newAcceptance.confirmed_trained"/> Đã được đào tạo
+          </label>
+        </div>
+        <div class="form-group"><label>Ghi chú</label><input class="form-control" v-model="newAcceptance.note"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="showAcceptance=false">Đóng</button>
+        <button class="btn btn-success" @click="submitAcceptance">Xác nhận</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted, reactive } = Vue
+
+createApp({
+  setup() {
+    const page = ref('projects')
+    const tab = ref('feedback')
+    const loading = ref(false)
+    const search = ref('')
+    const statusFilter = ref('')
+    const attachFiles = ref([])
+    const projectAttachments = ref([])
+    const isAdmin = ref(localStorage.getItem('dx_admin') === '1')
+    const showPinModal = ref(false)
+    const pinInput = ref('')
+    const pinError = ref('')
+    const showModuleMenu = ref(false)
+    const currentModuleKey = ref(null)
+
+    const projects = ref([])
+    const currentProject = ref(null)
+    const feedbackList = ref([])
+    const versionList = ref([])
+    const trainingList = ref([])
+
+    const showNewProject = ref(false)
+    const showEditProject = ref(false)
+    const editProject = ref({})
+    const showAcceptance = ref(false)
+    const showApproveModal = ref(false)
+    const showPromptModal = ref(false)
+    const acceptanceVersion = ref(null)
+    const acceptanceList = ref([])
+    const approveTarget = ref(null)
+    const approveDecision = ref('approved')
+    const approveReason = ref('')
+    const approvePriority = ref(1)
+    const selectedFeedbacks = ref([])
+    const promptData = ref({ prompt: '', feedback_count: 0 })
+    const myName = ref(localStorage.getItem('dx_user') || '')
+
+    // Task logs state
+    const taskLogs = ref([])
+    const logPolling = ref(null)
+    const waitingClaude = ref(false)
+    const logCountBeforeSend = ref(0)
+    const claudeDoneMessage = ref('')
+
+    async function loadTaskLogs() {
+      if (!currentProject.value) return
+      const r = await fetch(`/api/task-logs?project_id=${currentProject.value.id}`).then(r => r.json()).catch(() => [])
+      taskLogs.value = Array.isArray(r) ? r : []
+      // Nếu có log mới so với lúc gửi → Claude Code đã xong
+      if (waitingClaude.value && taskLogs.value.length > logCountBeforeSend.value) {
+        const newLog = taskLogs.value[0] // log mới nhất (DESC)
+        const icon = { success: '✅', partial: '⚠️', failed: '❌', need_info: '❓' }[newLog.status] || '📋'
+        const label = { success: 'Hoàn thành', partial: 'Một phần', failed: 'Thất bại', need_info: 'Cần thêm thông tin' }[newLog.status] || newLog.status
+        claudeDoneMessage.value = `${icon} Claude Code đã xử lý xong: ${label}`
+        waitingClaude.value = false
+        stopLogPolling()
+      }
+    }
+
+    function startLogPolling() {
+      logCountBeforeSend.value = taskLogs.value.length
+      waitingClaude.value = true
+      claudeDoneMessage.value = ''
+      stopLogPolling()
+      logPolling.value = setInterval(loadTaskLogs, 5000)
+    }
+
+    function stopLogPolling() {
+      if (logPolling.value) { clearInterval(logPolling.value); logPolling.value = null }
+    }
+
+    async function deleteTaskLog(id) {
+      await fetch(`/api/task-logs/${id}`, { method: 'DELETE' })
+      taskLogs.value = taskLogs.value.filter(l => l.id !== id)
+    }
+
+    // CM module state
+    const cmClasses = ref([])
+    const cmCurrentClass = ref(null)
+    const cmStudents = ref([])
+    const cmSearch = ref('')
+    const showCmClassModal = ref(false)
+    const showCmStudentModal = ref(false)
+    const cmEditingClass = ref(null)
+    const cmEditingStudent = ref(null)
+    const cmClassForm = ref({ name:'', description:'', teacher:'', schedule:'', start_date:'', end_date:'', max_students:30, status:'active' })
+    const cmStudentForm = ref({ full_name:'', phone:'', email:'', dob:'', address:'', note:'', status:'active' })
+
+    // Sub-tab, attendance, transfer state
+    const cmSubTab = ref('students')
+    const attendanceDate = ref(new Date().toISOString().slice(0, 10))
+    const attendanceRecords = ref([])
+    const attendanceSummary = ref([])
+    const attendanceWeekStart = ref('')
+    const showTransferModal = ref(false)
+    const transferStudent = ref(null)
+    const transferTargetClassId = ref('')
+    const scoreRecords = ref([])
+
+    const newProject = ref({ title:'', department:'', meeting_date:'', problem:'', demo_link:'', created_by:'', module_type:'' })
+    const newFeedback = ref({ author: myName.value, content:'' })
+    const newVersion = ref({ version:'', changelog:'', demo_link:'' })
+    const newAcceptance = ref({ person:'', department:'', confirmed_use:false, confirmed_trained:false, note:'' })
+    const newTraining = ref({ title:'', content:'', type:'doc' })
+    const myVotes = ref({})
+
+    const stages = [
+      { key:'pending', icon:'📋', label:'Chờ duyệt' },
+      { key:'feedback', icon:'💬', label:'Thu thập ý kiến' },
+      { key:'development', icon:'⚙️', label:'Phát triển' },
+      { key:'review', icon:'🔍', label:'Review' },
+      { key:'done', icon:'🎉', label:'Hoàn thành' },
+    ]
+
+    const stageIndex = key => stages.findIndex(s => s.key === key)
+
+    const filteredProjects = computed(() =>
+      projects.value.filter(p => {
+        if (statusFilter.value && p.status !== statusFilter.value) return false
+        if (!search.value) return true
+        return p.title.toLowerCase().includes(search.value.toLowerCase()) ||
+          (p.department||'').toLowerCase().includes(search.value.toLowerCase())
+      })
+    )
+
+    const approvedFeedbacks = computed(() => feedbackList.value.filter(f => f.status === 'approved'))
+
+    const statusLabel = s => ({ pending:'Chờ duyệt', feedback:'Thu thập ý kiến', approved:'Đã phê duyệt', development:'Đang phát triển', review:'Đang review', done:'Hoàn thành', rejected:'Từ chối', draft:'Nháp' }[s] || s)
+    const feedbackStatusLabel = s => ({ pending:'Chờ duyệt', approved:'Duyệt', rejected:'Từ chối', deferred:'Hoãn' }[s] || s)
+    const formatDate = d => d ? d.substring(0,16).replace('T',' ') : ''
+    const myVote = id => myVotes.value[id]
+
+    function changeName() {
+      const n = prompt('Nhập tên của bạn:', myName.value)
+      if (n) { myName.value = n; localStorage.setItem('dx_user', n) }
+    }
+
+    async function loadProjects() {
+      loading.value = true
+      const r = await fetch('/api/projects').then(r=>r.json()).catch(()=>[])
+      projects.value = Array.isArray(r) ? r : []
+      loading.value = false
+    }
+
+    async function loadFeedback() {
+      if (!currentProject.value) return
+      const r = await fetch(`/api/feedback?project_id=${currentProject.value.id}`).then(r=>r.json()).catch(()=>[])
+      feedbackList.value = Array.isArray(r) ? r : []
+    }
+
+    async function loadVersions() {
+      if (!currentProject.value) return
+      const r = await fetch(`/api/versions?project_id=${currentProject.value.id}`).then(r=>r.json()).catch(()=>[])
+      versionList.value = Array.isArray(r) ? r : []
+    }
+
+    async function loadTraining() {
+      if (!currentProject.value) return
+      const r = await fetch(`/api/training?project_id=${currentProject.value.id}`).then(r=>r.json()).catch(()=>[])
+      trainingList.value = Array.isArray(r) ? r : []
+    }
+
+    function goPage(p) { page.value = p }
+
+    function openModulePage(key) {
+      currentModuleKey.value = key
+      page.value = 'module-list'
+    }
+
+    const moduleProjects = computed(() =>
+      projects.value.filter(p => p.module_type === currentModuleKey.value)
+    )
+
+    function openProjectModule(p) {
+      openProject(p)
+      tab.value = 'module'
+    }
+
+    async function openProject(p) {
+      currentProject.value = { ...p }
+      tab.value = 'feedback'
+      page.value = 'detail'
+      selectedFeedbacks.value = []
+      cmCurrentClass.value = null
+      cmClasses.value = []
+      cmStudents.value = []
+      loadFeedback()
+      loadAttachments()
+      loadVersions()
+      loadTraining()
+      // Đồng bộ trạng thái build từ server
+      try {
+        const s = await fetch(`/api/projects/${p.id}/app-status`).then(r => r.json())
+        if (s.building && !buildingApps[p.id]) {
+          buildingApps[p.id] = true
+          const poll = setInterval(async () => {
+            const s2 = await fetch(`/api/projects/${p.id}/app-status`).then(r => r.json())
+            if (s2.exists) { clearInterval(poll); buildingApps[p.id] = false; window.open(`/apps/${p.id}/`, '_blank') }
+            else if (!s2.building) { clearInterval(poll); buildingApps[p.id] = false }
+          }, 10000)
+          setTimeout(() => { clearInterval(poll); buildingApps[p.id] = false }, 15 * 60 * 1000)
+        }
+      } catch { /* ignore */ }
+    }
+
+    async function loadCmClasses() {
+      if (!currentProject.value) return
+      const r = await fetch(`/api/cm-classes?project_id=${currentProject.value.id}`).then(r=>r.json()).catch(()=>[])
+      cmClasses.value = Array.isArray(r) ? r : []
+    }
+
+    async function loadCmStudents(classId, search='') {
+      let url = `/api/cm-students?class_id=${classId}`
+      if (search) url += `&search=${encodeURIComponent(search)}`
+      const r = await fetch(url).then(r=>r.json()).catch(()=>[])
+      cmStudents.value = Array.isArray(r) ? r : []
+    }
+
+    function openCmClass(c) { cmCurrentClass.value = { ...c }; cmSearch.value = ''; loadCmStudents(c.id) }
+    function openNewCmClass() { cmEditingClass.value = null; cmClassForm.value = { name:'', description:'', teacher:'', schedule:'', start_date:'', end_date:'', max_students:30, status:'active' }; showCmClassModal.value = true }
+    function openEditCmClass(c) { cmEditingClass.value = c; cmClassForm.value = { ...c }; showCmClassModal.value = true }
+
+    async function saveCmClass() {
+      if (!cmClassForm.value.name) return alert('Nhập tên lớp')
+      if (cmEditingClass.value) {
+        await fetch(`/api/cm-classes/${cmEditingClass.value.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cmClassForm.value) })
+        cmCurrentClass.value = { ...cmCurrentClass.value, ...cmClassForm.value }
+      } else {
+        await fetch('/api/cm-classes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ project_id: currentProject.value.id, ...cmClassForm.value }) })
+      }
+      showCmClassModal.value = false
+      loadCmClasses()
+    }
+
+    async function deleteCmClass(c) {
+      if (!confirm(`Xóa lớp "${c.name}"? Toàn bộ học viên cũng bị xóa.`)) return
+      await fetch(`/api/cm-classes/${c.id}`, { method:'DELETE' })
+      showCmClassModal.value = false
+      cmCurrentClass.value = null
+      loadCmClasses()
+    }
+
+    function openAddCmStudent() { cmEditingStudent.value = null; cmStudentForm.value = { full_name:'', phone:'', email:'', dob:'', address:'', note:'', status:'active' }; showCmStudentModal.value = true }
+    function openEditCmStudent(s) { cmEditingStudent.value = s; cmStudentForm.value = { ...s }; showCmStudentModal.value = true }
+
+    async function saveCmStudent() {
+      if (!cmStudentForm.value.full_name) return alert('Nhập họ tên')
+      if (cmEditingStudent.value) {
+        await fetch(`/api/cm-students/${cmEditingStudent.value.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cmStudentForm.value) })
+      } else {
+        await fetch('/api/cm-students', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ class_id: cmCurrentClass.value.id, ...cmStudentForm.value }) })
+      }
+      showCmStudentModal.value = false
+      loadCmStudents(cmCurrentClass.value.id, cmSearch.value)
+      loadCmClasses()
+    }
+
+    async function deleteCmStudent(s) {
+      if (!confirm(`Xóa học viên "${s.full_name}"?`)) return
+      await fetch(`/api/cm-students/${s.id}`, { method:'DELETE' })
+      loadCmStudents(cmCurrentClass.value.id, cmSearch.value)
+      loadCmClasses()
+    }
+
+    let cmSearchTimer = null
+    function searchCmStudents() {
+      clearTimeout(cmSearchTimer)
+      cmSearchTimer = setTimeout(() => loadCmStudents(cmCurrentClass.value.id, cmSearch.value), 300)
+    }
+
+    function openNewProject() {
+      newProject.value = { title:'', department:'', contact:'', meeting_date:'', deadline:'', priority:'', problem:'', expected_outcome:'', expected_users:'', demo_link:'', created_by: myName.value, module_type:'', status:'pending' }
+      showNewProject.value = true
+    }
+
+    function openEditProject() {
+      editProject.value = { ...currentProject.value }
+      showEditProject.value = true
+    }
+
+    async function saveEditProject() {
+      await fetch(`/api/projects/${currentProject.value.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editProject.value)
+      })
+      Object.assign(currentProject.value, editProject.value)
+      showEditProject.value = false
+      loadProjects()
+    }
+
+    const moduleLabel = t => ({ class_manager: '🏫 Quản lý lớp học' }[t] || t)
+
+    const availableModules = [
+      { key: 'class_manager', icon: '🏫', label: 'Quản lý lớp học', desc: 'Danh sách lớp, học viên, điểm danh' },
+    ]
+
+    async function setModule(key) {
+      currentProject.value.module_type = key
+      await fetch(`/api/projects/${currentProject.value.id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(currentProject.value)
+      })
+      loadProjects()
+    }
+
+    function onAttachFile(e) {
+      attachFiles.value = Array.from(e.target.files)
+    }
+
+    async function loadAttachments() {
+      if (!currentProject.value) return
+      projectAttachments.value = await fetch(`/api/projects/${currentProject.value.id}/attachments`).then(r => r.json()).catch(() => [])
+    }
+
+    async function uploadMoreFiles(e) {
+      const files = Array.from(e.target.files)
+      if (!files.length) return
+      const fd = new FormData()
+      files.forEach(f => fd.append('files', f))
+      await fetch(`/api/projects/${currentProject.value.id}/upload`, { method: 'POST', body: fd })
+      e.target.value = ''
+      loadAttachments()
+    }
+
+    async function deleteAttachment(att) {
+      if (!confirm(`Xóa file "${att.original_name}"?`)) return
+      await fetch(`/api/projects/${currentProject.value.id}/attachments/${att.id}`, { method: 'DELETE' })
+      loadAttachments()
+    }
+
+    async function createProject() {
+      if (!newProject.value.title) return alert('Nhập tên dự án')
+      const r = await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newProject.value) })
+      const data = await r.json()
+      if (attachFiles.value.length && data.id) {
+        const fd = new FormData()
+        attachFiles.value.forEach(f => fd.append('files', f))
+        await fetch(`/api/projects/${data.id}/upload`, { method:'POST', body: fd })
+        attachFiles.value = []
+      }
+      showNewProject.value = false
+      loadProjects()
+    }
+
+    async function deleteProject(p) {
+      if (!confirm(`Xóa dự án "${p.title}"?\nToàn bộ ý kiến, phiên bản, nhật ký sẽ bị xóa.`)) return
+      await fetch(`/api/projects/${p.id}`, { method: 'DELETE' })
+      projects.value = projects.value.filter(x => x.id !== p.id)
+    }
+
+    const buildingApps = reactive({})
+
+    async function openApp(p) {
+      const { exists } = await fetch(`/api/projects/${p.id}/app-status`).then(r => r.json())
+      if (exists) { window.open(`/apps/${p.id}/`, '_blank'); return }
+
+      if (buildingApps[p.id]) return // đang build rồi
+
+      buildingApps[p.id] = true
+      await fetch(`/api/projects/${p.id}/build`, { method: 'POST' })
+
+      // Poll mỗi 10s cho đến khi app xuất hiện
+      const poll = setInterval(async () => {
+        const s = await fetch(`/api/projects/${p.id}/app-status`).then(r => r.json())
+        if (s.exists) {
+          clearInterval(poll)
+          buildingApps[p.id] = false
+          window.open(`/apps/${p.id}/`, '_blank')
+        } else if (!s.building) {
+          // Claude đã thoát nhưng không tạo được file
+          clearInterval(poll)
+          buildingApps[p.id] = false
+        }
+      }, 10000)
+
+      // timeout 15 phút
+      setTimeout(() => { clearInterval(poll); buildingApps[p.id] = false }, 15 * 60 * 1000)
+    }
+
+    async function submitPin() {
+      const r = await fetch('/api/verify-pin', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ pin: pinInput.value })
+      })
+      if (r.ok) {
+        isAdmin.value = true
+        localStorage.setItem('dx_admin', '1')
+        showPinModal.value = false
+        pinInput.value = ''
+        pinError.value = ''
+      } else {
+        pinError.value = 'PIN không đúng, thử lại.'
+      }
+    }
+
+    function logoutAdmin() {
+      isAdmin.value = false
+      localStorage.removeItem('dx_admin')
+    }
+
+    async function approveProject() {
+      currentProject.value.status = 'development'
+      await fetch(`/api/projects/${currentProject.value.id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(currentProject.value)
+      })
+      loadProjects()
+      // Trigger build luôn
+      openApp(currentProject.value)
+    }
+
+    async function rejectProject() {
+      const reason = prompt('Lý do từ chối (bắt buộc):')
+      if (!reason) return
+      currentProject.value.status = 'rejected'
+      currentProject.value.problem = currentProject.value.problem + `\n\n[Từ chối: ${reason}]`
+      await fetch(`/api/projects/${currentProject.value.id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(currentProject.value)
+      })
+      loadProjects()
+    }
+
+    async function markDone(p) {
+      if (!confirm(`Đánh dấu dự án "${p.title}" là Hoàn thành?`)) return
+      p.status = 'done'
+      await fetch(`/api/projects/${p.id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(p)
+      })
+      loadProjects()
+    }
+
+    async function updateStatus() {
+      await fetch(`/api/projects/${currentProject.value.id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(currentProject.value)
+      })
+      loadProjects()
+    }
+
+    async function updateModuleType() {
+      await fetch(`/api/projects/${currentProject.value.id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(currentProject.value)
+      })
+      loadProjects()
+    }
+
+    async function submitFeedback() {
+      if (!newFeedback.value.author || !newFeedback.value.content) return alert('Nhập họ tên và nội dung')
+      localStorage.setItem('dx_user', newFeedback.value.author)
+      myName.value = newFeedback.value.author
+      await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ project_id: currentProject.value.id, ...newFeedback.value }) })
+      newFeedback.value.content = ''
+      loadFeedback()
+    }
+
+    async function deleteFeedback(f) {
+      if (!confirm('Xóa ý kiến này?')) return
+      await fetch(`/api/feedback/${f.id}`, { method:'DELETE' })
+      loadFeedback()
+    }
+
+    async function rebuildApp(p) {
+      await fetch(`/api/projects/${p.id}/reset-app`, { method: 'POST' })
+      openApp(p)
+    }
+
+    async function quickApproveFeedback(f) {
+      await fetch(`/api/feedback/${f.id}/status`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' })
+      })
+      loadFeedback()
+    }
+
+    async function quickRejectFeedback(f) {
+      await fetch(`/api/feedback/${f.id}/status`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' })
+      })
+      loadFeedback()
+    }
+
+    function openApproveModal(f) {
+      approveTarget.value = f
+      approveDecision.value = 'approved'
+      approveReason.value = f.reject_reason || ''
+      approvePriority.value = f.priority || 0
+      showApproveModal.value = true
+    }
+
+    async function confirmApprove() {
+      const f = approveTarget.value
+      await fetch(`/api/feedback/${f.id}/status`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ status: approveDecision.value, reject_reason: approveReason.value })
+      })
+      showApproveModal.value = false
+      loadFeedback()
+      // Nếu duyệt → xóa app cũ và build lại
+      if (approveDecision.value === 'approved') {
+        await fetch(`/api/projects/${currentProject.value.id}/reset-app`, { method: 'POST' })
+        openApp(currentProject.value)
+      }
+    }
+
+    function toggleSelect(id) {
+      const i = selectedFeedbacks.value.indexOf(id)
+      if (i === -1) selectedFeedbacks.value.push(id)
+      else selectedFeedbacks.value.splice(i, 1)
+    }
+
+    async function bulkUpdateStatus(status) {
+      if (selectedFeedbacks.value.length === 0) return alert('Chọn ít nhất một ý kiến')
+      await Promise.all(selectedFeedbacks.value.map(id =>
+        fetch(`/api/feedback/${id}/status`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status }) })
+      ))
+      selectedFeedbacks.value = []
+      loadFeedback()
+    }
+
+    const bulkApprove = () => bulkUpdateStatus('approved')
+    const bulkDefer   = () => bulkUpdateStatus('deferred')
+    const bulkReject  = () => bulkUpdateStatus('rejected')
+
+    async function setPriority(f, val) {
+      f.priority = parseInt(val)
+      await fetch(`/api/feedback/${f.id}/status`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ status: f.status, reject_reason: f.reject_reason || '', priority: f.priority })
+      })
+    }
+
+    async function generatePromptPackage() {
+      const r = await fetch(`/api/projects/${currentProject.value.id}/prompt-package`).then(r=>r.json()).catch(()=>null)
+      if (!r) return alert('Lỗi tạo prompt package')
+      promptData.value = r
+      showPromptModal.value = true
+    }
+
+    async function sendToClaudeCode() {
+      const approved = feedbackList.value.filter(f => f.status === 'approved')
+      if (approved.length === 0) return alert('Chưa có ý kiến nào được duyệt! Hãy duyệt ý kiến trước.')
+      if (!confirm(`Gửi ${approved.length} yêu cầu đã duyệt về Claude Code?\nDự án sẽ chuyển sang trạng thái "Đang phát triển".`)) return
+      // Tạo prompt package
+      const r = await fetch(`/api/projects/${currentProject.value.id}/prompt-package`).then(r=>r.json()).catch(()=>null)
+      if (!r) return alert('Lỗi tạo prompt package')
+      promptData.value = r
+      // Chuyển status sang development
+      currentProject.value.status = 'development'
+      await fetch(`/api/projects/${currentProject.value.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentProject.value)
+      })
+      // Chuyển sang tab Claude Log để theo dõi
+      tab.value = 'logs'
+      await loadTaskLogs()
+      startLogPolling()
+    }
+
+    async function copyPrompt() {
+      try {
+        await navigator.clipboard.writeText(promptData.value.prompt)
+        alert('Đã copy vào clipboard!')
+      } catch (e) {
+        // fallback
+        const el = document.createElement('textarea')
+        el.value = promptData.value.prompt
+        document.body.appendChild(el)
+        el.select()
+        document.execCommand('copy')
+        document.body.removeChild(el)
+        alert('Đã copy!')
+      }
+    }
+
+    async function vote(f, type) {
+      const voter = myName.value || prompt('Nhập tên của bạn:')
+      if (!voter) return
+      if (!myName.value) { myName.value = voter; localStorage.setItem('dx_user', voter) }
+      myVotes.value[f.id] = type
+      await fetch(`/api/feedback/${f.id}/vote`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ voter, vote_type: type }) })
+      loadFeedback()
+    }
+
+    async function submitVersion() {
+      if (!newVersion.value.version) return alert('Nhập tên phiên bản')
+      await fetch('/api/versions', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ project_id: currentProject.value.id, ...newVersion.value, created_by: myName.value }) })
+      newVersion.value = { version:'', changelog:'', demo_link:'' }
+      loadVersions()
+      loadProjects()
+    }
+
+    async function openAcceptance(v) {
+      acceptanceVersion.value = v
+      acceptanceList.value = await fetch(`/api/versions/${v.id}/acceptances`).then(r=>r.json()).catch(()=>[])
+      newAcceptance.value = { person: myName.value, department:'', confirmed_use:false, confirmed_trained:false, note:'' }
+      showAcceptance.value = true
+    }
+
+    async function submitAcceptance() {
+      if (!newAcceptance.value.person) return alert('Nhập họ tên')
+      localStorage.setItem('dx_user', newAcceptance.value.person)
+      myName.value = newAcceptance.value.person
+      await fetch(`/api/versions/${acceptanceVersion.value.id}/accept`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newAcceptance.value) })
+      acceptanceList.value = await fetch(`/api/versions/${acceptanceVersion.value.id}/acceptances`).then(r=>r.json()).catch(()=>[])
+      loadVersions()
+    }
+
+    async function submitTraining() {
+      if (!newTraining.value.title) return alert('Nhập tiêu đề tài liệu')
+      await fetch('/api/training', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ project_id: currentProject.value.id, ...newTraining.value, created_by: myName.value }) })
+      newTraining.value = { title:'', content:'', type:'doc' }
+      loadTraining()
+    }
+
+    async function deleteTraining(t) {
+      if (!confirm('Xóa tài liệu này?')) return
+      await fetch(`/api/training/${t.id}`, { method:'DELETE' })
+      loadTraining()
+    }
+
+    // --- Scores functions ---
+    async function loadScores() {
+      if (!cmCurrentClass.value) return
+      const rows = await fetch(`/api/cm-scores?class_id=${cmCurrentClass.value.id}`).then(r=>r.json()).catch(()=>[])
+      scoreRecords.value = Array.isArray(rows) ? rows : []
+    }
+
+    async function saveScores() {
+      if (!cmCurrentClass.value) return
+      await fetch('/api/cm-scores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: cmCurrentClass.value.id,
+          records: scoreRecords.value.map(r => ({
+            student_id: r.student_id,
+            toan: r.toan, van: r.van, anh: r.anh
+          }))
+        })
+      })
+      alert('Đã lưu điểm!')
+    }
+
+    // --- Attendance functions ---
+    async function loadAttendance() {
+      if (!cmCurrentClass.value) return
+      // Load students to build attendance form
+      const students = await fetch(`/api/cm-students?class_id=${cmCurrentClass.value.id}`).then(r=>r.json()).catch(()=>[])
+      // Load existing attendance for this date
+      const existing = await fetch(`/api/cm-attendance?class_id=${cmCurrentClass.value.id}&date=${attendanceDate.value}`).then(r=>r.json()).catch(()=>[])
+      const existMap = {}
+      existing.forEach(a => { existMap[a.student_id] = a })
+      attendanceRecords.value = students.filter(s => s.status === 'active').map(s => ({
+        student_id: s.id,
+        full_name: s.full_name,
+        status: existMap[s.id] ? existMap[s.id].status : 'present',
+        note: existMap[s.id] ? existMap[s.id].note : ''
+      }))
+    }
+
+    async function saveAttendance() {
+      if (!cmCurrentClass.value) return
+      await fetch('/api/cm-attendance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: cmCurrentClass.value.id,
+          date: attendanceDate.value,
+          records: attendanceRecords.value.map(r => ({ student_id: r.student_id, status: r.status, note: r.note }))
+        })
+      })
+      alert('Đã lưu điểm danh!')
+    }
+
+    function getMonday(dateStr) {
+      const d = new Date(dateStr)
+      const day = d.getDay()
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+      const mon = new Date(d.setDate(diff))
+      return mon.toISOString().slice(0, 10)
+    }
+
+    async function loadAttendanceSummary() {
+      if (!cmCurrentClass.value) return
+      const monday = getMonday(attendanceDate.value)
+      attendanceWeekStart.value = monday
+      const rows = await fetch(`/api/cm-attendance/summary?class_id=${cmCurrentClass.value.id}&week=${monday}`).then(r=>r.json()).catch(()=>[])
+      attendanceSummary.value = rows
+    }
+
+    // --- Transfer functions ---
+    function openTransferModal(student) {
+      transferStudent.value = student
+      transferTargetClassId.value = ''
+      showTransferModal.value = true
+    }
+
+    async function confirmTransfer() {
+      if (!transferStudent.value || !transferTargetClassId.value) return
+      const r = await fetch(`/api/cm-students/${transferStudent.value.id}/transfer`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_class_id: parseInt(transferTargetClassId.value) })
+      }).then(r=>r.json())
+      if (r.ok) {
+        alert('Đã chuyển lớp thành công!')
+        showTransferModal.value = false
+        loadCmStudents(cmCurrentClass.value.id)
+        loadCmClasses()
+      } else {
+        alert('Lỗi: ' + (r.error || 'Không xác định'))
+      }
+    }
+
+    onMounted(loadProjects)
+
+    return {
+      page, tab, loading, search, showModuleMenu, currentModuleKey, projects, currentProject,
+      feedbackList, versionList, trainingList, approvedFeedbacks, taskLogs,
+      loadTaskLogs, deleteTaskLog, waitingClaude, claudeDoneMessage,
+      showNewProject, showEditProject, editProject, openEditProject, saveEditProject,
+      showAcceptance, showApproveModal, showPromptModal,
+      acceptanceVersion, acceptanceList,
+      approveTarget, approveDecision, approveReason, approvePriority,
+      selectedFeedbacks, promptData, myName, stages,
+      newProject, newFeedback, newVersion, newAcceptance, newTraining,
+      filteredProjects, statusFilter,
+      goPage, openProject, openNewProject, createProject, deleteProject, openApp, rebuildApp, buildingApps, updateStatus, updateModuleType, setModule, approveProject, rejectProject, markDone,
+      isAdmin, showPinModal, pinInput, pinError, submitPin, logoutAdmin,
+      attachFiles, onAttachFile, projectAttachments, loadAttachments, uploadMoreFiles, deleteAttachment,
+      openModulePage, moduleProjects, openProjectModule,
+      availableModules,
+      submitFeedback, deleteFeedback, quickApproveFeedback, quickRejectFeedback, openApproveModal, confirmApprove,
+      toggleSelect, bulkApprove, bulkDefer, bulkReject,
+      setPriority, generatePromptPackage, copyPrompt, sendToClaudeCode,
+      vote, submitVersion, openAcceptance, submitAcceptance,
+      submitTraining, deleteTraining, changeName,
+      stageIndex, statusLabel, feedbackStatusLabel, formatDate, myVote,
+      moduleLabel,
+      cmClasses, cmCurrentClass, cmStudents, cmSearch,
+      showCmClassModal, showCmStudentModal, cmEditingClass, cmEditingStudent,
+      cmClassForm, cmStudentForm,
+      loadCmClasses, openCmClass, openNewCmClass, openEditCmClass, saveCmClass, deleteCmClass,
+      openAddCmStudent, openEditCmStudent, saveCmStudent, deleteCmStudent, searchCmStudents,
+      cmSubTab, attendanceDate, attendanceRecords, attendanceSummary, attendanceWeekStart,
+      loadAttendance, saveAttendance, loadAttendanceSummary,
+      showTransferModal, transferStudent, transferTargetClassId,
+      openTransferModal, confirmTransfer,
+      scoreRecords, loadScores, saveScores
+    }
+  }
+}).mount('#app')
+</script>
+</body>
+</html>
