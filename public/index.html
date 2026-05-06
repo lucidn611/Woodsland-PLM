@@ -396,6 +396,10 @@
                   <label>Nội dung ý kiến</label>
                   <textarea class="form-control" v-model="newFeedback.content" placeholder="Nhập ý kiến, góp ý, yêu cầu..."></textarea>
                 </div>
+                <div class="form-group" style="margin-bottom:8px">
+                  <label>Đính kèm ảnh/file (tùy chọn)</label>
+                  <input type="file" id="feedbackFileInput" multiple accept="image/*,.xlsx,.xls,.pdf,.doc,.docx" style="font-size:13px;width:100%">
+                </div>
                 <button class="btn btn-primary btn-sm" @click="submitFeedback">Gửi ý kiến</button>
               </div>
             </div>
@@ -415,6 +419,12 @@
               </div>
               <div class="f-content">{{ f.content }}</div>
               <div v-if="f.reject_reason" class="reject-reason">Lý do từ chối: {{ f.reject_reason }}</div>
+              <div v-if="f.attachments && f.attachments.length" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                <template v-for="att in f.attachments" :key="att.id">
+                  <img v-if="isImage(att.original_name)" :src="'/api/feedback/'+f.id+'/download/'+att.id" style="max-height:72px;max-width:120px;border-radius:4px;cursor:pointer;border:1px solid #e2e8f0;object-fit:cover" @click="window.open('/api/feedback/'+f.id+'/download/'+att.id,'_blank')">
+                  <a v-else :href="'/api/feedback/'+f.id+'/download/'+att.id" target="_blank" style="font-size:12px;padding:3px 10px;background:#e2e8f0;border-radius:4px;text-decoration:none;color:#334155">📎 {{ att.original_name }}</a>
+                </template>
+              </div>
               <div class="vote-bar">
                 <button class="vote-btn" :class="{'voted-up': myVote(f.id)==='up'}" @click="vote(f, 'up')">👍 {{ f.votes_up }}</button>
                 <button class="vote-btn" :class="{'voted-down': myVote(f.id)==='down'}" @click="vote(f, 'down')">👎 {{ f.votes_down }}</button>
@@ -1168,6 +1178,7 @@ createApp({
 
     const approvedFeedbacks = computed(() => feedbackList.value.filter(f => f.status === 'approved'))
 
+    const isImage = name => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name || '')
     const statusLabel = s => ({ pending:'Chưa duyệt', feedback:'Thu thập ý kiến', approved:'Đã duyệt', development:'Đã duyệt', review:'Đã duyệt', done:'Hoàn thành', rejected:'Từ chối', draft:'Nháp' }[s] || s)
     const feedbackStatusLabel = s => ({ pending:'Chờ duyệt', approved:'Duyệt', rejected:'Từ chối', deferred:'Hoãn' }[s] || s)
     const formatDate = d => d ? d.substring(0,16).replace('T',' ') : ''
@@ -1188,7 +1199,12 @@ createApp({
     async function loadFeedback() {
       if (!currentProject.value) return
       const r = await fetch(`/api/feedback?project_id=${currentProject.value.id}`).then(r=>r.json()).catch(()=>[])
-      feedbackList.value = Array.isArray(r) ? r : []
+      const list = Array.isArray(r) ? r : []
+      await Promise.all(list.map(async f => {
+        const atts = await fetch(`/api/feedback/${f.id}/attachments`).then(r=>r.json()).catch(()=>[])
+        f.attachments = Array.isArray(atts) ? atts : []
+      }))
+      feedbackList.value = list
     }
 
     async function loadVersions() {
@@ -1494,7 +1510,14 @@ createApp({
       if (!newFeedback.value.author || !newFeedback.value.content) return alert('Nhập họ tên và nội dung')
       localStorage.setItem('dx_user', newFeedback.value.author)
       myName.value = newFeedback.value.author
-      await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ project_id: currentProject.value.id, ...newFeedback.value }) })
+      const r = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ project_id: currentProject.value.id, ...newFeedback.value }) }).then(r=>r.json())
+      const fileInput = document.getElementById('feedbackFileInput')
+      if (fileInput && fileInput.files.length > 0) {
+        const formData = new FormData()
+        for (const file of fileInput.files) formData.append('files', file)
+        await fetch(`/api/feedback/${r.id}/upload`, { method: 'POST', body: formData })
+        fileInput.value = ''
+      }
       newFeedback.value.content = ''
       loadFeedback()
     }
@@ -1779,7 +1802,7 @@ createApp({
       setPriority, generatePromptPackage, copyPrompt, sendToClaudeCode,
       vote, submitVersion, openAcceptance, submitAcceptance,
       submitTraining, deleteTraining, changeName,
-      stageIndex, statusLabel, feedbackStatusLabel, formatDate, myVote,
+      stageIndex, statusLabel, feedbackStatusLabel, formatDate, myVote, isImage,
       moduleLabel,
       cmClasses, cmCurrentClass, cmStudents, cmSearch,
       showCmClassModal, showCmStudentModal, cmEditingClass, cmEditingStudent,

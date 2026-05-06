@@ -69,6 +69,61 @@ app.get('/api/projects/:id/download/:attachId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+// Feedback attachments
+const feedbackStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'data/attachments/feedback', req.params.id)
+    fs.mkdirSync(dir, { recursive: true })
+    cb(null, dir)
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname))
+  }
+})
+const feedbackUpload = multer({ storage: feedbackStorage, limits: { fileSize: 20 * 1024 * 1024 } })
+
+app.post('/api/feedback/:id/upload', feedbackUpload.array('files', 5), async (req, res) => {
+  try {
+    const db = require('./src/db')
+    for (const file of req.files) {
+      const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8')
+      await db.run_p('INSERT INTO feedback_attachments (feedback_id, filename, original_name) VALUES (?,?,?)',
+        [req.params.id, file.filename, originalname])
+    }
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/feedback/:id/attachments', async (req, res) => {
+  try {
+    const db = require('./src/db')
+    const rows = await db.all_p('SELECT * FROM feedback_attachments WHERE feedback_id=? ORDER BY created_at ASC', [req.params.id])
+    res.json(rows)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/api/feedback/:id/attachments/:attachId', async (req, res) => {
+  try {
+    const db = require('./src/db')
+    const att = await db.get_p('SELECT * FROM feedback_attachments WHERE id=? AND feedback_id=?', [req.params.attachId, req.params.id])
+    if (!att) return res.status(404).json({ error: 'Không tìm thấy' })
+    const filePath = path.join(__dirname, 'data/attachments/feedback', req.params.id, att.filename)
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+    await db.run_p('DELETE FROM feedback_attachments WHERE id=?', [req.params.attachId])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/feedback/:id/download/:attachId', async (req, res) => {
+  try {
+    const db = require('./src/db')
+    const att = await db.get_p('SELECT * FROM feedback_attachments WHERE id=? AND feedback_id=?', [req.params.attachId, req.params.id])
+    if (!att) return res.status(404).json({ error: 'Không có file' })
+    const filePath = path.join(__dirname, 'data/attachments/feedback', req.params.id, att.filename)
+    res.download(filePath, att.original_name)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 const { spawn } = require('child_process')
 const CLAUDE_BIN = 'C:\\Users\\Administrator\\AppData\\Roaming\\npm\\claude.cmd'
 const MCP_CONFIG = 'C:\\Quan_ly_vong_doi\\MCP-SERVER-QL\\mcp-config.json'

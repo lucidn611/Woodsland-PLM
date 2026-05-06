@@ -211,6 +211,14 @@ db.serialize(() => {
     created_at TEXT DEFAULT (datetime('now','localtime'))
   )`)
 
+  db.run(`CREATE TABLE IF NOT EXISTS feedback_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feedback_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  )`)
+
   // Module: Task Logs - kết quả Claude Code báo về
   db.run(`CREATE TABLE IF NOT EXISTS task_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
