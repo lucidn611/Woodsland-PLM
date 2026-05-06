@@ -110,6 +110,18 @@ app.post('/api/verify-pin', (req, res) => {
   else res.status(401).json({ ok: false })
 })
 
+// Webhook tự động deploy khi push GitHub
+app.post('/api/deploy', (req, res) => {
+  const secret = req.headers['x-deploy-secret']
+  if (secret !== (process.env.DEPLOY_SECRET || 'woodsland2020')) return res.status(401).json({ ok: false })
+  res.json({ ok: true, message: 'Deploy started' })
+  const { exec } = require('child_process')
+  exec('git -C "C:\\Quan_ly_vong_doi\\DX-LIFECYCLE" pull origin main && git -C "C:\\Quan_ly_vong_doi\\MCP-SERVER-QL" pull origin main', (err, stdout) => {
+    console.log('[Deploy]', stdout || err?.message)
+    setTimeout(() => { exec('pm2 restart dx-lifecycle auto-worker') }, 2000)
+  })
+})
+
 app.use('/api/projects', require('./src/api/projects'))
 app.use('/api/feedback', require('./src/api/feedback'))
 app.use('/api/versions', require('./src/api/versions'))
