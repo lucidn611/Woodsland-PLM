@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tính toán Nguyên liệu lò đốt</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --bg: #f5f7fa;
+            --card: #ffffff;
+            --border: #dadce0;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --success: #34a853;
+            --warning: #fbbc04;
+            --danger: #ea4335;
+            --header-bg: #1a73e8;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .app-header {
+            background: var(--header-bg);
+            color: white;
+            padding: 16px 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .app-header h1 {
+            font-size: 20px;
+            font-weight: 500;
+        }
+
+        .app-header p {
+            font-size: 13px;
+            opacity: 0.85;
+            margin-top: 4px;
+        }
+
+        .controls {
+            background: var(--card);
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        select, input[type="number"], input[type="month"] {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(26,115,232,0.15);
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--primary);
+        }
+
+        .main-content {
+            padding: 16px 24px;
+            overflow-x: auto;
+        }
+
+        .boiler-section {
+            margin-bottom: 24px;
+        }
+
+        .boiler-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background: var(--primary-light);
+            border-radius: 6px;
+            display: inline-block;
+        }
+
+        .data-table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 800px;
+            font-size: 12px;
+            background: var(--card);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .data-table th, .data-table td {
+            border: 1px solid var(--border);
+            padding: 6px 8px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .data-table thead th {
+            background: #f1f3f4;
+            font-weight: 600;
+            color: var(--text);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .data-table .row-header {
+            background: #fafafa;
+            font-weight: 500;
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            min-width: 180px;
+        }
+
+        .data-table .row-header-sub {
+            background: #fafafa;
+            text-align: left;
+            padding-left: 20px;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            min-width: 180px;
+        }
+
+        .data-table .section-header {
+            background: #e8f0fe;
+            font-weight: 600;
+            text-align: left;
+            color: var(--primary);
+        }
+
+        .data-table .day-header {
+            background: #e3f2fd;
+            font-weight: 600;
+            min-width: 70px;
+        }
+
+        .data-table .shift-header {
+            background: #f5f5f5;
+            font-size: 11px;
+            min-width: 70px;
+        }
+
+        .data-table input[type="number"] {
+            width: 75px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 3px 5px;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .data-table input[type="number"]:focus {
+            border-color: var(--primary);
+            background: #fff;
+        }
+
+        .data-table .calc-value {
+            font-weight: 500;
+            color: #1565c0;
+        }
+
+        .data-table .total-value {
+            font-weight: 700;
+            color: var(--success);
+            background: #e8f5e9;
+        }
+
+        .data-table .weight-value {
+            color: #e65100;
+            font-weight: 500;
+        }
+
+        .summary-bar {
+            background: var(--card);
+            padding: 16px 24px;
+            border-top: 2px solid var(--primary);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-top: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .summary-item {
+            text-align: center;
+        }
+
+        .summary-item .label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .summary-item .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .summary-item .unit {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1557b0;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #2d9248;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .save-status {
+            font-size: 12px;
+            color: var(--success);
+            margin-left: 8px;
+        }
+
+        .bag-type-select {
+            width: 90px;
+            font-size: 11px;
+            padding: 2px 4px;
+        }
+
+        @media (max-width: 768px) {
+            .controls { flex-direction: column; align-items: flex-start; }
+            .main-content { padding: 8px; }
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            padding: 8px 24px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            padding: 8px 20px;
+            border: none;
+            background: transparent;
+            font-size: 13px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab:hover {
+            background: var(--primary-light);
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="app-header">
+        <h1>BẢNG TÍNH TOÁN NGUYÊN LIỆU ĐỐT LÒ HƠI</h1>
+        <p>Phòng CSR - Quản lý nguyên liệu mùn cưa và củi đốt lò</p>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>Tháng/Năm:</label>
+            <input type="month" v-model="selectedMonth" @change="loadData">
+        </div>
+        <div class="control-group">
+            <label>Chọn lò:</label>
+            <div class="checkbox-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" v-model="boilers" value="6T"> Lò 6 tấn
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" v-model="boilers" value="12T"> Lò 12 tấn
+                </label>
+            </div>
+        </div>
+        <div class="control-group">
+            <button class="btn btn-primary" @click="saveData">Lưu dữ liệu</button>
+            <button class="btn btn-danger" @click="clearMonthData">Xóa tháng</button>
+            <span class="save-status" v-if="saveMessage">{{ saveMessage }}</span>
+        </div>
+    </div>
+
+    <div class="tab-bar" v-if="boilers.length > 1">
+        <button class="tab" :class="{ active: activeTab === '12T' }" @click="activeTab = '12T'">Lò 12 tấn</button>
+        <button class="tab" :class="{ active: activeTab === '6T' }" @click="activeTab = '6T'">Lò 6 tấn</button>
+        <button class="tab" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'">Tổng hợp</button>
+    </div>
+    <div class="tab-bar" v-else-if="boilers.length === 1">
+        <button class="tab" :class="{ active: activeTab !== 'summary' }" @click="activeTab = boilers[0]">{{ boilers[0] === '12T' ? 'Lò 12 tấn' : 'Lò 6 tấn' }}</button>
+        <button class="tab" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'">Tổng hợp</button>
+    </div>
+
+    <div class="main-content" v-if="boilers.length === 0">
+        <div style="text-align:center; padding:60px; color:var(--text-secondary);">
+            <p style="font-size:16px;">Vui lòng chọn ít nhất một loại lò để bắt đầu.</p>
+        </div>
+    </div>
+
+    <div class="main-content" v-else>
+        <!-- Boiler tables -->
+        <template v-for="boiler in displayedBoilers" :key="boiler">
+            <div class="boiler-section" v-show="activeTab === boiler || (boilers.length === 1 && activeTab !== 'summary')">
+                <div class="boiler-title">{{ boiler === '12T' ? 'LÒ 12 TẤN' : 'LÒ 6 TẤN' }} - Tháng {{ monthLabel }}</div>
+
+                <div style="overflow-x:auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="min-width:180px; position:sticky; left:0; z-index:3; background:#f1f3f4;">Hạng mục</th>
+                                <th rowspan="2" style="min-width:100px;">Chi tiết</th>
+                                <th v-for="day in daysInMonth" :key="day" colspan="3" class="day-header">
+                                    Ngày {{ day }}/{{ currentMonthNum }}
+                                </th>
+                                <th rowspan="2" style="background:#fff3e0; font-weight:700;">Tổng tháng</th>
+                            </tr>
+                            <tr>
+                                <template v-for="day in daysInMonth" :key="'s'+day">
+                                    <th class="shift-header">Ca 1</th>
+                                    <th class="shift-header">Ca 2</th>
+                                    <th class="shift-header">Ca 3</th>
+                                </template>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- MÙN CƯA Section -->
+                            <tr>
+                                <td colspan="2" class="section-header">Mùn cưa cấp cho nồi hơi</td>
+                                <td v-for="i in daysInMonth * 3 + 1" :key="'mh'+i" class="section-header"></td>
+                            </tr>
+                            <!-- Chỉ số vòng -->
+                            <tr>
+                                <td class="row-header">Chỉ số vòng quay</td>
+                                <td class="row-header-sub">Vòng (0~999.999)</td>
+                                <template v-for="day in daysInMonth" :key="'cv'+day">
+                                    <td v-for="shift in 3" :key="'cv'+day+'s'+shift">
+                                        <input type="number" min="0" max="999999"
+                                            :value="getCounter(boiler, day, shift)"
+                                            @change="setCounter(boiler, day, shift, $event.target.value)">
+                                    </td>
+                                </template>
+                                <td></td>
+                            </tr>
+                            <!-- Số vòng quay/ngày -->
+                            <tr>
+                                <td class="row-header">Số vòng quay/ngày</td>
+                                <td class="row-header-sub">Vòng</td>
+                                <template v-for="day in daysInMonth" :key="'vq'+day">
+                                    <td colspan="3" class="calc-value">
+                                        {{ formatNum(getRotationsPerDay(boiler, day)) }}
+                                    </td>
+                                </template>
+                                <td class="total-value">{{ formatNum(getTotalRotations(boiler)) }}</td>
+                            </tr>
+                            <!-- Khối lượng mùn/ngày -->
+                            <tr>
+                                <td class="row-header">Khối lượng mùn/ngày</td>
+                                <td class="row-header-sub">kg (×1,57)</td>
+                                <template v-for="day in daysInMonth" :key="'klm'+day">
+                                    <td colspan="3" class="weight-value">
+                                        {{ formatNum(getSawdustWeight(boiler, day)) }}
+                                    </td>
+                                </template>
+                                <td class="total-value">{{ formatNum(getTotalSawdustWeight(boiler)) }}</td>
+                            </tr>
+
+                            <!-- CỦI Section -->
+                            <tr>
+                                <td colspan="2" class="section-header">Củi đầu mầu cấp cho nồi hơi</td>
+                                <td v-for="i in daysInMonth * 3 + 1" :key="'ch'+i" class="section-header"></td>
+                            </tr>
+                            <!-- Loại bao củi -->
+                            <tr>
+                                <td class="row-header">Loại bao củi</td>
+                                <td class="row-header-sub">Chọn loại</td>
+                                <template v-for="day in daysInMonth" :key="'lb'+day">
+                                    <td v-for="shift in 3" :key="'lb'+day+'s'+shift">
+                                        <select class="bag-type-select"
+                                            :value="getBagType(boiler, day, shift)"
+                                            @change="setBagType(boiler, day, shift, $event.target.value)">
+                                            <option value="jumbo">Jumbo</option>
+                                            <option value="small">Bao bé</option>
+                                        </select>
+                                    </td>
+                                </template>
+                                <td></td>
+                            </tr>
+                            <!-- Số bao củi/ca -->
+                            <tr>
+                                <td class="row-header">Số bao củi/ca</td>
+                                <td class="row-header-sub">Bao</td>
+                                <template v-for="day in daysInMonth" :key="'bc'+day">
+                                    <td v-for="shift in 3" :key="'bc'+day+'s'+shift">
+                                        <input type="number" min="0"
+                                            :value="getBagCount(boiler, day, shift)"
+                                            @change="setBagCount(boiler, day, shift, $event.target.value)">
+                                    </td>
+                                </template>
+                                <td></td>
+                            </tr>
+                            <!-- Tổng bao củi/ngày -->
+                            <tr>
+                                <td class="row-header">Tổng bao củi/ngày</td>
+                                <td class="row-header-sub">Bao</td>
+                                <template v-for="day in daysInMonth" :key="'tb'+day">
+                                    <td colspan="3" class="calc-value">
+                                        {{ formatNum(getTotalBagsPerDay(boiler, day)) }}
+                                    </td>
+                                </template>
+                                <td class="total-value">{{ formatNum(getTotalBags(boiler)) }}</td>
+                            </tr>
+                            <!-- Khối lượng bao củi/ngày -->
+                            <tr>
+                                <td class="row-header">Khối lượng củi/ngày</td>
+                                <td class="row-header-sub">kg</td>
+                                <template v-for="day in daysInMonth" :key="'klc'+day">
+                                    <td colspan="3" class="weight-value">
+                                        {{ formatNum(getFirewoodWeight(boiler, day)) }}
+                                    </td>
+                                </template>
+                                <td class="total-value">{{ formatNum(getTotalFirewoodWeight(boiler)) }}</td>
+                            </tr>
+
+                            <!-- TỔNG Section -->
+                            <tr>
+                                <td colspan="2" class="section-header" style="background:#fff3e0; color:#e65100;">Tổng nguyên liệu/ngày (kg)</td>
+                                <template v-for="day in daysInMonth" :key="'tnl'+day">
+                                    <td colspan="3" class="total-value" style="font-size:13px;">
+                                        {{ formatNum(getDailyTotal(boiler, day)) }}
+                                    </td>
+                                </template>
+                                <td class="total-value" style="font-size:14px; background:#c8e6c9;">
+                                    {{ formatNum(getMonthlyTotal(boiler)) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </template>
+
+        <!-- Summary tab -->
+        <div v-show="activeTab === 'summary'" class="boiler-section">
+            <div class="summary-bar">
+                <div class="summary-item" v-if="boilers.includes('12T')">
+                    <div class="label">Tổng khối lượng Lò 12T</div>
+                    <div class="value">{{ formatNum(getMonthlyTotal('12T')) }} <span class="unit">kg</span></div>
+                </div>
+                <div class="summary-item" v-if="boilers.includes('6T')">
+                    <div class="label">Tổng khối lượng Lò 6T</div>
+                    <div class="value">{{ formatNum(getMonthlyTotal('6T')) }} <span class="unit">kg</span></div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">Tổng khối lượng tháng {{ monthLabel }}</div>
+                    <div class="value" style="color:var(--danger);">{{ formatNum(getGrandTotal()) }} <span class="unit">kg</span></div>
+                </div>
+            </div>
+
+            <div style="margin-top:24px; overflow-x:auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="min-width:200px;">Hạng mục</th>
+                            <template v-for="boiler in displayedBoilers" :key="'sh'+boiler">
+                                <th>{{ boiler === '12T' ? 'Lò 12 tấn' : 'Lò 6 tấn' }}</th>
+                            </template>
+                            <th style="background:#fff3e0;">Tổng cộng</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="row-header">Tổng số vòng quay (vòng)</td>
+                            <td v-for="boiler in displayedBoilers" :key="'sr'+boiler" class="calc-value">
+                                {{ formatNum(getTotalRotations(boiler)) }}
+                            </td>
+                            <td class="total-value">{{ formatNum(displayedBoilers.reduce((s,b) => s + getTotalRotations(b), 0)) }}</td>
+                        </tr>
+                        <tr>
+                            <td class="row-header">Khối lượng mùn cưa (kg)</td>
+                            <td v-for="boiler in displayedBoilers" :key="'sw'+boiler" class="weight-value">
+                                {{ formatNum(getTotalSawdustWeight(boiler)) }}
+                            </td>
+                            <td class="total-value">{{ formatNum(displayedBoilers.reduce((s,b) => s + getTotalSawdustWeight(b), 0)) }}</td>
+                        </tr>
+                        <tr>
+                            <td class="row-header">Tổng số bao củi (bao)</td>
+                            <td v-for="boiler in displayedBoilers" :key="'sb'+boiler" class="calc-value">
+                                {{ formatNum(getTotalBags(boiler)) }}
+                            </td>
+                            <td class="total-value">{{ formatNum(displayedBoilers.reduce((s,b) => s + getTotalBags(b), 0)) }}</td>
+                        </tr>
+                        <tr>
+                            <td class="row-header">Khối lượng củi (kg)</td>
+                            <td v-for="boiler in displayedBoilers" :key="'fw'+boiler" class="weight-value">
+                                {{ formatNum(getTotalFirewoodWeight(boiler)) }}
+                            </td>
+                            <td class="total-value">{{ formatNum(displayedBoilers.reduce((s,b) => s + getTotalFirewoodWeight(b), 0)) }}</td>
+                        </tr>
+                        <tr style="font-weight:700;">
+                            <td class="row-header" style="font-weight:700; color:var(--danger);">TỔNG KHỐI LƯỢNG THÁNG (kg)</td>
+                            <td v-for="boiler in displayedBoilers" :key="'mt'+boiler" class="total-value" style="font-size:14px;">
+                                {{ formatNum(getMonthlyTotal(boiler)) }}
+                            </td>
+                            <td class="total-value" style="font-size:15px; background:#c8e6c9;">
+                                {{ formatNum(getGrandTotal()) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, computed, watch, onMounted } = Vue;
+
+const JUMBO_WEIGHT = 373;
+const SMALL_BAG_WEIGHT = 15;
+const SAWDUST_FACTOR = 1.57;
+const MAX_COUNTER = 999999;
+const STORAGE_KEY = 'boiler_fuel_data_v1';
+
+createApp({
+    setup() {
+        const now = new Date();
+        const selectedMonth = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+        const boilers = ref(['12T']);
+        const activeTab = ref('12T');
+        const saveMessage = ref('');
+        const allData = ref({});
+
+        const currentYear = computed(() => parseInt(selectedMonth.value.split('-')[0]));
+        const currentMonthNum = computed(() => parseInt(selectedMonth.value.split('-')[1]));
+        const monthLabel = computed(() => `${currentMonthNum.value}/${currentYear.value}`);
+
+        const daysInMonth = computed(() => {
+            return new Date(currentYear.value, currentMonthNum.value, 0).getDate();
+        });
+
+        const displayedBoilers = computed(() => {
+            const order = ['12T', '6T'];
+            return order.filter(b => boilers.value.includes(b));
+        });
+
+        function getMonthKey() {
+            return selectedMonth.value;
+        }
+
+        function ensureStructure(boiler, day, shift) {
+            const mk = getMonthKey();
+            if (!allData.value[mk]) allData.value[mk] = {};
+            if (!allData.value[mk][boiler]) allData.value[mk][boiler] = {};
+            if (!allData.value[mk][boiler][day]) allData.value[mk][boiler][day] = {};
+            if (!allData.value[mk][boiler][day][shift]) {
+                allData.value[mk][boiler][day][shift] = { counter: null, bagCount: 0, bagType: 'jumbo' };
+            }
+        }
+
+        function getShiftData(boiler, day, shift) {
+            ensureStructure(boiler, day, shift);
+            return allData.value[getMonthKey()][boiler][day][shift];
+        }
+
+        function getCounter(boiler, day, shift) {
+            const d = getShiftData(boiler, day, shift);
+            return d.counter;
+        }
+
+        function setCounter(boiler, day, shift, val) {
+            const d = getShiftData(boiler, day, shift);
+            const num = val === '' || val === null ? null : parseInt(val);
+            if (num !== null && (num < 0 || num > MAX_COUNTER)) return;
+            d.counter = num;
+        }
+
+        function getBagType(boiler, day, shift) {
+            return getShiftData(boiler, day, shift).bagType;
+        }
+
+        function setBagType(boiler, day, shift, val) {
+            getShiftData(boiler, day, shift).bagType = val;
+        }
+
+        function getBagCount(boiler, day, shift) {
+            return getShiftData(boiler, day, shift).bagCount;
+        }
+
+        function setBagCount(boiler, day, shift, val) {
+            const num = val === '' || val === null ? 0 : Math.max(0, parseInt(val) || 0);
+            getShiftData(boiler, day, shift).bagCount = num;
+        }
+
+        function calcRotation(current, previous) {
+            if (current === null || previous === null) return 0;
+            if (current >= previous) return current - previous;
+            return (MAX_COUNTER + 1 - previous) + current;
+        }
+
+        function getRotationsPerDay(boiler, day) {
+            const ca1 = getCounter(boiler, day, 1);
+            const ca2 = getCounter(boiler, day, 2);
+            const ca3 = getCounter(boiler, day, 3);
+
+            let prevCa3 = null;
+            if (day > 1) {
+                prevCa3 = getCounter(boiler, day - 1, 3);
+            } else {
+                const prevMonthDate = new Date(currentYear.value, currentMonthNum.value - 2, 1);
+                const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+                const prevMonthDays = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).getDate();
+                if (allData.value[prevMonthKey] && allData.value[prevMonthKey][boiler] && allData.value[prevMonthKey][boiler][prevMonthDays] && allData.value[prevMonthKey][boiler][prevMonthDays][3]) {
+                    prevCa3 = allData.value[prevMonthKey][boiler][prevMonthDays][3].counter;
+                }
+            }
+
+            const rot1 = calcRotation(ca1, prevCa3);
+            const rot2 = calcRotation(ca2, ca1);
+            const rot3 = calcRotation(ca3, ca2);
+
+            return rot1 + rot2 + rot3;
+        }
+
+        function getSawdustWeight(boiler, day) {
+            return getRotationsPerDay(boiler, day) * SAWDUST_FACTOR;
+        }
+
+        function getBagWeight(bagType) {
+            return bagType === 'jumbo' ? JUMBO_WEIGHT : SMALL_BAG_WEIGHT;
+        }
+
+        function getFirewoodWeightPerShift(boiler, day, shift) {
+            const d = getShiftData(boiler, day, shift);
+            return d.bagCount * getBagWeight(d.bagType);
+        }
+
+        function getTotalBagsPerDay(boiler, day) {
+            let total = 0;
+            for (let s = 1; s <= 3; s++) {
+                total += getShiftData(boiler, day, s).bagCount;
+            }
+            return total;
+        }
+
+        function getFirewoodWeight(boiler, day) {
+            let total = 0;
+            for (let s = 1; s <= 3; s++) {
+                total += getFirewoodWeightPerShift(boiler, day, s);
+            }
+            return total;
+        }
+
+        function getDailyTotal(boiler, day) {
+            return getSawdustWeight(boiler, day) + getFirewoodWeight(boiler, day);
+        }
+
+        function getTotalRotations(boiler) {
+            let total = 0;
+            for (let d = 1; d <= daysInMonth.value; d++) {
+                total += getRotationsPerDay(boiler, d);
+            }
+            return total;
+        }
+
+        function getTotalSawdustWeight(boiler) {
+            return getTotalRotations(boiler) * SAWDUST_FACTOR;
+        }
+
+        function getTotalBags(boiler) {
+            let total = 0;
+            for (let d = 1; d <= daysInMonth.value; d++) {
+                total += getTotalBagsPerDay(boiler, d);
+            }
+            return total;
+        }
+
+        function getTotalFirewoodWeight(boiler) {
+            let total = 0;
+            for (let d = 1; d <= daysInMonth.value; d++) {
+                total += getFirewoodWeight(boiler, d);
+            }
+            return total;
+        }
+
+        function getMonthlyTotal(boiler) {
+            return getTotalSawdustWeight(boiler) + getTotalFirewoodWeight(boiler);
+        }
+
+        function getGrandTotal() {
+            return displayedBoilers.value.reduce((sum, b) => sum + getMonthlyTotal(b), 0);
+        }
+
+        function formatNum(val) {
+            if (val === null || val === undefined || isNaN(val) || val === 0) return '0';
+            return val.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(allData.value));
+                saveMessage.value = 'Đã lưu thành công!';
+                setTimeout(() => { saveMessage.value = ''; }, 3000);
+            } catch (e) {
+                saveMessage.value = 'Lỗi khi lưu!';
+            }
+        }
+
+        function loadData() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    allData.value = JSON.parse(saved);
+                }
+            } catch (e) {
+                allData.value = {};
+            }
+        }
+
+        function clearMonthData() {
+            if (confirm(`Bạn có chắc muốn xóa toàn bộ dữ liệu tháng ${monthLabel.value}?`)) {
+                const mk = getMonthKey();
+                if (allData.value[mk]) {
+                    delete allData.value[mk];
+                    saveData();
+                }
+            }
+        }
+
+        watch(boilers, (val) => {
+            if (val.length > 0 && !val.includes(activeTab.value) && activeTab.value !== 'summary') {
+                activeTab.value = val[0];
+            }
+        });
+
+        onMounted(() => {
+            loadData();
+        });
+
+        return {
+            selectedMonth,
+            boilers,
+            activeTab,
+            saveMessage,
+            daysInMonth,
+            currentMonthNum,
+            monthLabel,
+            displayedBoilers,
+            getCounter, setCounter,
+            getBagType, setBagType,
+            getBagCount, setBagCount,
+            getRotationsPerDay,
+            getSawdustWeight,
+            getTotalBagsPerDay,
+            getFirewoodWeight,
+            getDailyTotal,
+            getTotalRotations,
+            getTotalSawdustWeight,
+            getTotalBags,
+            getTotalFirewoodWeight,
+            getMonthlyTotal,
+            getGrandTotal,
+            formatNum,
+            saveData,
+            loadData,
+            clearMonthData,
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
