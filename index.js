@@ -111,14 +111,24 @@ app.post('/api/verify-pin', (req, res) => {
 })
 
 // Webhook tự động deploy khi push GitHub
-app.post('/api/deploy', (req, res) => {
-  const secret = req.headers['x-deploy-secret']
-  if (secret !== (process.env.DEPLOY_SECRET || 'woodsland2020')) return res.status(401).json({ ok: false })
+const crypto = require('crypto')
+app.post('/api/deploy', express.raw({ type: 'application/json' }), (req, res) => {
+  const DEPLOY_SECRET = process.env.DEPLOY_SECRET || 'woodsland2020'
+  const sig = req.headers['x-hub-signature-256']
+  if (sig) {
+    const expected = 'sha256=' + crypto.createHmac('sha256', DEPLOY_SECRET).update(req.body).digest('hex')
+    if (sig !== expected) return res.status(401).json({ ok: false, error: 'Invalid signature' })
+  }
+  const payload = JSON.parse(req.body)
+  if (payload.ref && !payload.ref.includes('main')) return res.json({ ok: true, message: 'Not main branch, skip' })
   res.json({ ok: true, message: 'Deploy started' })
+  console.log('[Deploy] Bắt đầu deploy từ GitHub webhook...')
   const { exec } = require('child_process')
-  exec('git -C "C:\\Quan_ly_vong_doi\\DX-LIFECYCLE" pull origin main && git -C "C:\\Quan_ly_vong_doi\\MCP-SERVER-QL" pull origin main', (err, stdout) => {
-    console.log('[Deploy]', stdout || err?.message)
-    setTimeout(() => { exec('pm2 restart dx-lifecycle auto-worker') }, 2000)
+  exec('git -C "C:\\Quan_ly_vong_doi\\DX-LIFECYCLE" pull origin main && git -C "C:\\Quan_ly_vong_doi\\MCP-SERVER-QL" pull origin main', (err, stdout, stderr) => {
+    console.log('[Deploy] git pull:', stdout || stderr || err?.message)
+    setTimeout(() => {
+      exec('pm2 restart dx-lifecycle auto-worker', (e, o) => console.log('[Deploy] pm2 restart:', o || e?.message))
+    }, 1000)
   })
 })
 
