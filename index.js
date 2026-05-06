@@ -5,7 +5,7 @@ const os = require('os')
 const app = express()
 const PORT = process.env.PORT || 2020
 
-app.use(express.json())
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf } }))
 app.use(express.urlencoded({ extended: true }))
 app.use(express.static(path.join(__dirname, 'public')))
 
@@ -112,15 +112,16 @@ app.post('/api/verify-pin', (req, res) => {
 
 // Webhook tự động deploy khi push GitHub
 const crypto = require('crypto')
-app.post('/api/deploy', express.raw({ type: 'application/json' }), (req, res) => {
+app.post('/api/deploy', (req, res) => {
   const DEPLOY_SECRET = process.env.DEPLOY_SECRET || 'woodsland2020'
   const sig = req.headers['x-hub-signature-256']
-  if (sig) {
-    const expected = 'sha256=' + crypto.createHmac('sha256', DEPLOY_SECRET).update(req.body).digest('hex')
+  if (sig && req.rawBody) {
+    const expected = 'sha256=' + crypto.createHmac('sha256', DEPLOY_SECRET).update(req.rawBody).digest('hex')
     if (sig !== expected) return res.status(401).json({ ok: false, error: 'Invalid signature' })
   }
-  const payload = JSON.parse(req.body)
-  if (payload.ref && !payload.ref.includes('main')) return res.json({ ok: true, message: 'Not main branch, skip' })
+  // Ping event từ GitHub — chỉ confirm, không deploy
+  if (req.headers['x-github-event'] === 'ping') return res.json({ ok: true, message: 'Pong' })
+  if (req.body.ref && !req.body.ref.includes('main')) return res.json({ ok: true, message: 'Not main branch, skip' })
   res.json({ ok: true, message: 'Deploy started' })
   console.log('[Deploy] Bắt đầu deploy từ GitHub webhook...')
   const { exec } = require('child_process')
